@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; worker-src 'self' blob:; frame-src blob:; object-src blob:; connect-src 'self' blob: data:; font-src 'self' data:; base-uri 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>OMRChecker Web</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"><i></i><i></i><i class="on"></i><i></i></span>
+      <div>
+        <h1>OMRChecker Web</h1>
+        <p class="tag">Bubble-sheet grading that never leaves your browser</p>
+      </div>
+    </div>
+    <label class="exam-picker">Exam
+      <select id="examSelect"></select>
+    </label>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="exam" aria-selected="true">1 · Exam</button>
+    <button role="tab" data-tab="roster">2 · Students</button>
+    <button role="tab" data-tab="key">3 · Answer key</button>
+    <button role="tab" data-tab="sheets">4 · Bubble sheets</button>
+    <button role="tab" data-tab="scan">5 · Scan &amp; grade</button>
+    <button role="tab" data-tab="results">6 · Results</button>
+  </nav>
+
+  <main>
+    <!-- ================= EXAM ================= -->
+    <section id="tab-exam" class="panel" role="tabpanel">
+      <div class="grid2">
+        <div class="card">
+          <h2>Exam settings</h2>
+          <label>Title (printed on the sheet)
+            <input id="exTitle" type="text" maxlength="120">
+          </label>
+          <div class="row">
+            <label>Questions
+              <input id="exQuestions" type="number" min="1" max="255">
+            </label>
+            <label>Choices per question
+              <select id="exChoices"></select>
+            </label>
+            <label>Student ID digits
+              <input id="exDigits" type="number" min="0" max="10">
+            </label>
+            <label>Paper
+              <select id="exPaper">
+                <option value="letter">US Letter</option>
+                <option value="a4">A4</option>
+              </select>
+            </label>
+          </div>
+          <p id="exCapacity" class="hint"></p>
+          <p id="exErrors" class="error"></p>
+          <div class="btns">
+            <button id="exNew">New exam</button>
+            <button id="exDuplicate">Duplicate</button>
+            <button id="exDelete" class="danger">Delete exam</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>How it works</h2>
+          <ol class="steps">
+            <li><b>Students</b> — import or type your roster (up to 400).</li>
+            <li><b>Answer key</b> — type the key as plain text, e.g. <code>1. B</code>.</li>
+            <li><b>Bubble sheets</b> — print blank sheets, or personalised sheets with each student's name and ID pre-filled.</li>
+            <li><b>Scan &amp; grade</b> — scan the completed sheets to a PDF (any resolution ≥ 150 dpi) and drop it in.</li>
+            <li><b>Results</b> — review flagged sheets, then download the CSV.</li>
+          </ol>
+          <p class="privacy">🔒 Everything — roster, keys, scans, scores — stays on this computer, in this browser.
+            No data is uploaded anywhere. Use <b>Backup</b> to move your data to another browser.</p>
+          <h3>Data</h3>
+          <div class="btns">
+            <button id="dataExport">Backup all data (.json)</button>
+            <label class="button">Restore backup<input id="dataImport" type="file" accept=".json,application/json" hidden></label>
+            <button id="dataWipe" class="danger">Erase everything</button>
+          </div>
+          <p id="storageInfo" class="hint"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ROSTER ================= -->
+    <section id="tab-roster" class="panel" role="tabpanel" hidden>
+      <div class="grid2 wide-left">
+        <div class="card">
+          <div class="card-head">
+            <h2>Students <span id="rosterCount" class="pill"></span></h2>
+            <input id="rosterFilter" type="search" placeholder="Filter…">
+          </div>
+          <p id="rosterWarn" class="warn"></p>
+          <div class="table-wrap tall">
+            <table id="rosterTable" class="data">
+              <thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <form id="rosterAdd" class="row add-row">
+            <input name="id" placeholder="ID (digits)" inputmode="numeric" pattern="\d*">
+            <input name="name" placeholder="Name" required>
+            <input name="section" placeholder="Section (optional)">
+            <button type="submit">Add</button>
+          </form>
+        </div>
+        <div class="card">
+          <h2>Import</h2>
+          <p class="hint">Paste from a spreadsheet or load a CSV. Columns: <code>id, name, section</code>
+            (a header row with <i>id</i>, <i>name</i> / <i>first</i> / <i>last</i>, <i>section</i> is recognised).
+            Students without an ID can be numbered automatically.</p>
+          <textarea id="rosterPaste" rows="8" placeholder="1001, Ada Lovelace, Period 2&#10;1002, Alan Turing, Period 2"></textarea>
+          <div class="btns">
+            <button id="rosterImportPaste">Add pasted rows</button>
+            <label class="button">Load CSV…<input id="rosterFile" type="file" accept=".csv,.txt,text/csv" hidden></label>
+          </div>
+          <label class="check"><input id="rosterReplace" type="checkbox"> Replace the current roster instead of adding</label>
+          <h3>Tools</h3>
+          <div class="btns">
+            <button id="rosterAutoId">Number students without an ID</button>
+            <button id="rosterExport">Download roster CSV</button>
+            <button id="rosterClear" class="danger">Clear roster</button>
+          </div>
+          <p class="hint">The roster is shared by all exams.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= KEY ================= -->
+    <section id="tab-key" class="panel" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <h2>Answer key</h2>
+          <textarea id="keyText" rows="20" spellcheck="false" class="mono"></textarea>
+          <div class="btns">
+            <button id="keyTemplate">Insert numbered template</button>
+            <label class="button">Load .txt…<input id="keyFile" type="file" accept=".txt,text/plain" hidden></label>
+            <button id="keyDownload">Download key</button>
+          </div>
+          <details class="hint">
+            <summary>Key format</summary>
+<pre>1. A          one correct answer
+2) c          case and punctuation don't matter
+3 B 2         worth 2 points (default 1)
+4 A,C         either A or C is accepted
+5 *           free — everyone gets credit
+6 -           dropped — not scored
+# comments start with a hash
+
+ABCDA DCBAB   or just letters in order;
+[AC] B *      [..] groups, * and - work here too</pre>
+          </details>
+        </div>
+        <div class="card">
+          <h2>Preview <span id="keySummary" class="pill"></span></h2>
+          <p id="keyErrors" class="error"></p>
+          <p id="keyWarnings" class="warn"></p>
+          <div id="keyGrid" class="key-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SHEETS ================= -->
+    <section id="tab-sheets" class="panel" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <h2>Generate bubble sheets</h2>
+          <fieldset>
+            <label class="check"><input type="radio" name="sheetMode" value="blank" checked> Blank sheets — students write and bubble their own ID</label>
+            <label class="indent">Copies <input id="sheetCopies" type="number" min="1" max="500" value="30"></label>
+            <label class="check"><input type="radio" name="sheetMode" value="roster"> Personalised — one sheet per student, name printed and ID pre-filled</label>
+            <label class="indent">Section
+              <select id="sheetSection"><option value="">All students</option></select>
+            </label>
+          </fieldset>
+          <p id="sheetInfo" class="hint"></p>
+          <p id="sheetError" class="error"></p>
+          <div class="btns">
+            <button id="sheetGenerate" class="primary">Generate PDF</button>
+            <a id="sheetDownload" class="button" hidden>Download PDF</a>
+          </div>
+          <div class="notes">
+            <h3>Printing tips</h3>
+            <ul>
+              <li>Print at 100% or "fit to page" — both work; the corner squares handle scaling.</li>
+              <li>Don't change the exam settings after printing. The sheet records its own layout in the small squares along the top edge, so mismatches are detected.</li>
+              <li>Single-sided only. Scan in grayscale or colour; 200–300 dpi is ideal.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card preview-card">
+          <h2>Preview</h2>
+          <iframe id="sheetPreview" title="Bubble sheet preview"></iframe>
+          <p id="sheetPreviewEmpty" class="hint">Generate to see a preview.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SCAN ================= -->
+    <section id="tab-scan" class="panel" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Scan &amp; grade</h2>
+        <label id="dropZone" class="drop">
+          <input id="scanFiles" type="file" accept="application/pdf,image/*" multiple hidden>
+          <strong>Drop scanned PDFs or photos here</strong>
+          <span>or click to choose files · multi-page PDFs are split automatically</span>
+        </label>
+        <div class="row scan-opts">
+          <label>Mark sensitivity
+            <select id="thresholdMode">
+              <option value="auto">Automatic (recommended)</option>
+              <option value="0.30">High — catches light pencil</option>
+              <option value="0.45">Medium</option>
+              <option value="0.60">Low — ignores smudges</option>
+            </select>
+          </label>
+          <button id="rereadAll" title="Apply the sensitivity to all sheets scanned this session">Re-read this session's sheets</button>
+          <span id="scanStatus" class="hint"></span>
+        </div>
+        <progress id="scanProgress" max="1" value="0" hidden></progress>
+        <div class="table-wrap">
+          <table id="scanTable" class="data">
+            <thead><tr><th>Source</th><th>Student ID</th><th>Name</th><th>Score</th><th>Status</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="hint">Scanned images are kept only until you close this tab (for review). The answers and scores are saved.</p>
+      </div>
+    </section>
+
+    <!-- ================= RESULTS ================= -->
+    <section id="tab-results" class="panel" role="tabpanel" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Results</h2>
+          <div class="btns">
+            <button id="csvResults" class="primary">Download results CSV</button>
+            <button id="csvGradebook">Gradebook CSV (full roster)</button>
+            <button id="csvItems">Item analysis CSV</button>
+          </div>
+        </div>
+        <div id="stats" class="stats"></div>
+        <p id="resultsWarn" class="warn"></p>
+        <div class="table-wrap tall">
+          <table id="resultsTable" class="data">
+            <thead><tr>
+              <th data-sort="id">Student ID</th><th data-sort="name">Name</th><th data-sort="section">Section</th>
+              <th data-sort="score">Score</th><th data-sort="percent">%</th><th>Flags</th><th>Source</th><th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <details id="missingBox">
+          <summary>Students with no scanned sheet <span id="missingCount" class="pill"></span></summary>
+          <p id="missingList" class="missing"></p>
+        </details>
+        <details>
+          <summary>Item analysis</summary>
+          <div class="table-wrap"><table id="itemTable" class="data compact"></table></div>
+        </details>
+        <div class="btns"><button id="resultsClear" class="danger">Delete all results for this exam</button></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= REVIEW DIALOG ================= -->
+  <dialog id="review">
+    <form method="dialog" class="review-inner">
+      <div class="review-head">
+        <h2 id="rvTitle">Review</h2>
+        <button value="close" aria-label="Close">✕</button>
+      </div>
+      <div class="review-body">
+        <div class="review-canvas-wrap"><canvas id="rvCanvas"></canvas><p id="rvNoImage" class="hint" hidden>The scan image is no longer in memory (it is only kept for the session it was scanned in). You can still edit the answers below.</p></div>
+        <div class="review-side">
+          <label>Student ID <input id="rvId" inputmode="numeric"></label>
+          <label>or pick a student <select id="rvStudent"></select></label>
+          <p id="rvName" class="rv-name"></p>
+          <p id="rvScore" class="rv-score"></p>
+          <p class="hint">Click a bubble on the image — or below — to toggle it. Filled = read as marked (green if right), green ring = key, red ring = wrong, orange dot = check this question.</p>
+          <div id="rvAnswers" class="rv-answers"></div>
+          <ul id="rvFlags" class="rv-flags"></ul>
+          <div class="btns">
+            <button type="button" id="rvUseAsKey">Use this sheet as the answer key</button>
+            <button type="button" id="rvDelete" class="danger">Delete sheet</button>
+          </div>
+          <div class="btns">
+            <button type="button" id="rvPrev">← Previous</button>
+            <button type="button" id="rvNext">Next →</button>
+            <button type="button" id="rvNextFlag">Next flagged ⚑</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <footer class="foot">
+    OMRChecker Web · runs entirely in your browser <span id="repoLink"></span>
+  </footer>
+
+  <script src="vendor/pdf.min.js"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="js/layout.js"></script>
+  <script src="js/grading.js"></script>
+  <script src="js/omr.js"></script>
+  <script src="js/sheet.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
