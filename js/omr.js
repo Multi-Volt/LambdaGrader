@@ -179,13 +179,20 @@
   const BUBBLE_PTS = discOffsets(L.BUBBLE_R * 0.62, 0.22);
   const CODE_PTS = discOffsets(L.CODE_SIZE * 0.3, 0.3);
 
+  /**
+   * How dark the inside of a bubble is (0 = paper, 1 = corner-square black).
+   * Uses the level that 40% of the samples are darker than, rather than the
+   * mean. The printed letter covers well under 40% of the inside, so it does
+   * not count, while a real mark covering about half the bubble or more does.
+   */
   function darkness(gray, H, pts, cx, cy, white, black) {
-    let s = 0;
-    for (const [dx, dy] of pts) {
-      const [u, v] = apply(H, cx + dx, cy + dy);
-      s += sampleGray(gray, u, v);
+    const vals = new Float32Array(pts.length);
+    for (let i = 0; i < pts.length; i++) {
+      const [u, v] = apply(H, cx + pts[i][0], cy + pts[i][1]);
+      vals[i] = sampleGray(gray, u, v);
     }
-    const g = s / pts.length;
+    vals.sort();
+    const g = vals[Math.floor(vals.length * 0.4)];
     return Math.max(0, Math.min(1, (white - g) / Math.max(20, white - black)));
   }
 
@@ -199,6 +206,11 @@
     let acc = 0;
     for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * 0.9) return v; }
     return 255;
+  }
+
+  function percentile(values, p) {
+    const v = values.slice().sort((a, b) => a - b);
+    return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * p))] : 0;
   }
 
   function otsu(values) {
@@ -225,11 +237,11 @@
    * Decide which bubbles in one group are marked.
    * @returns {{marked:number[], flag:string|null}}
    */
-  function decide(fills, T) {
+  function decide(fills, T, allowMany) {
     const order = fills.map((f, i) => i).sort((a, b) => fills[b] - fills[a]);
     let marked = order.filter((i) => fills[i] >= T);
     let flag = null;
-    if (marked.length > 1) {
+    if (marked.length > 1 && !allowMany) {
       const top = fills[order[0]], second = fills[order[1]];
       if (top - second >= 0.3 && second < T + 0.15) {
         marked = [order[0]];
@@ -242,11 +254,15 @@
     return { marked: marked.sort((a, b) => a - b), flag };
   }
 
-  /** Turn per-bubble fill values into answers / ID given a threshold. */
-  function interpret(read, T) {
+  /**
+   * Turn per-bubble fill values into answers / ID given a threshold.
+   * @param multi  Set of 1-based question numbers where several marks are expected
+   *               ("select all that apply"), so extra marks are kept and not flagged.
+   */
+  function interpret(read, T, multi) {
     const answers = [], flags = [];
     read.qFills.forEach((fills, q) => {
-      const { marked, flag } = decide(fills, T);
+      const { marked, flag } = decide(fills, T, multi && multi.has(q + 1));
       answers.push(marked.map((i) => L.LETTERS[i]).join(''));
       if (flag) flags.push({ q: q + 1, type: flag });
     });
@@ -257,7 +273,13 @@
       if (marked.length === 1) id += String(marked[0]);
       else if (marked.length > 1) { id += '?'; idProblem = true; }
     }
-    return { answers, flags, studentId: id, idProblem };
+    let initial = '';
+    if (read.initFills) {
+      const { marked } = decide(read.initFills, T);
+      if (marked.length === 1) initial = L.INITIALS[marked[0]];
+      else if (marked.length > 1) { initial = '?'; idProblem = true; }
+    }
+    return { answers, flags, studentId: id, initial, idProblem };
   }
 
   /**
@@ -298,12 +320,31 @@
     const { img, H, white, black } = r;
     const qFills = layout.questions.map((q) => q.bubbles.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black)));
     const idFills = layout.id.map((c) => c.bubbles.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black)));
-    const all = qFills.flat().concat(idFills.flat());
+    let initFills = layout.initials.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black));
+    // Subtract the blank level (printed letter/digit + paper tone) measured on this page.
+    // For each answer letter, most questions leave it blank, so a low percentile over
+    // the questions is that letter's empty-bubble darkness.
+    const adjust = (v, base) => Math.max(0, (v - base) / (1 - base));
+    if (qFills.length >= 8) {
+      for (let i = 0; i < cfg.numChoices; i++) {
+        const base = Math.min(0.35, percentile(qFills.map((f) => f[i]), 0.3));
+        qFills.forEach((f) => { f[i] = adjust(f[i], base); });
+      }
+    }
+    const idBase = Math.min(0.35, percentile(idFills.flat().concat(initFills), 0.3));
+    idFills.forEach((col) => col.forEach((v, d) => { col[d] = adjust(v, idBase); }));
+    initFills = initFills.map((v) => adjust(v, idBase));
+    const keyBits = layout.keyStrip.map((p) => (darkness(img, H, CODE_PTS, p.x, p.y, white, black) > 0.5 ? 1 : 0));
+    const key = L.decodeKey(keyBits);
+    if (key === null) warnings.push('Student code strip at the bottom edge is damaged; matched by name.# instead.');
+    const all = qFills.flat().concat(idFills.flat(), initFills);
     const autoT = Math.max(0.3, Math.min(0.6, otsu(all)));
     return {
       cfg, H, rotated: r.rotated, warnings, autoThreshold: autoT,
       qFills: qFills.map((a) => a.map((v) => Math.round(v * 1000) / 1000)),
       idFills: idFills.map((a) => a.map((v) => Math.round(v * 1000) / 1000)),
+      initFills: initFills.map((v) => Math.round(v * 1000) / 1000),
+      key: key || 0,
       fiducials: r.fid.map((f) => [f.x, f.y]),
     };
   }

@@ -34,6 +34,18 @@
   const ID_BOX_TOP = 13.5;
   const ID_BOX_H = 5;
 
+  // Last-name initial: 26 bubbles (A–Z) in two rows of 13, in the left header.
+  const INIT_X0 = 3.8;
+  const INIT_DX = 4.6;
+  const INIT_Y0 = 38.6;
+  const INIT_DY = 4.6;
+  const INITIALS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  // Student code strip along the bottom edge. Personalised sheets print a
+  // roster key here (10 bits + 2 parity bits) so they match exactly, even when
+  // two students share a name.# number and initial. Blank sheets leave it empty.
+  const KEY_BITS = 12;
+
   const PAPER = { letter: [215.9, 279.4], a4: [210, 297] };
   const LETTERS = 'ABCDEFGH';
   const MAX_CHOICES = 8;
@@ -95,9 +107,15 @@
 
     const code = encodeCode(cfg).map((bit, i) => ({ x: CODE_X0 + i * CODE_DX, y: 0, bit }));
 
+    const initials = [...INITIALS].map((letter, i) => ({
+      letter, x: INIT_X0 + (i % 13) * INIT_DX, y: INIT_Y0 + Math.floor(i / 13) * INIT_DY,
+    }));
+    // Offset by half a step so an upside-down strip never overlaps the layout code.
+    const keyStrip = Array.from({ length: KEY_BITS }, (_, i) => ({ x: CODE_X0 + CODE_DX / 2 + i * CODE_DX, y: FRAME_H }));
+
     return {
       cfg: { numQuestions: nq, numChoices: nc, idDigits: nd },
-      questions, id, idX0, code, rows,
+      questions, id, idX0, code, rows, initials, keyStrip,
       lastRowY: rowY(rows - 1),
     };
   }
@@ -126,10 +144,27 @@
     return validateConfig(cfg).length ? null : cfg;
   }
 
+  function encodeKey(key) {
+    const bits = [];
+    for (let i = 0; i < 10; i++) bits.push((key >> i) & 1);
+    bits.push(bits.filter((_, i) => i % 2 === 0).reduce((a, b) => a ^ b, 0));
+    bits.push(bits.filter((_, i) => i % 2 === 1 && i < 10).reduce((a, b) => a ^ b, 0));
+    return bits;
+  }
+
+  /** @returns {number|null} 0 for an empty strip, null if the parity fails. */
+  function decodeKey(bits) {
+    let key = 0;
+    for (let i = 0; i < 10; i++) key |= bits[i] << i;
+    const check = encodeKey(key);
+    return check[10] === bits[10] && check[11] === bits[11] ? key : null;
+  }
+
   g.Layout = {
     FRAME_W, FRAME_H, FIDUCIAL, CODE_BITS, CODE_X0, CODE_DX, CODE_SIZE, BUBBLE_R, ID_DX, ID_DY, ID_TOP,
     ID_BOX_TOP, ID_BOX_H, PAPER, LETTERS, MAX_CHOICES, MAX_ID_DIGITS,
     fiducials: [[0, 0], [FRAME_W, 0], [0, FRAME_H], [FRAME_W, FRAME_H]],
-    maxQuestions, validateConfig, build, encodeCode, decodeCode,
+    INITIALS, KEY_BITS, MAX_KEY: 1023,
+    maxQuestions, validateConfig, build, encodeCode, decodeCode, encodeKey, decodeKey,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

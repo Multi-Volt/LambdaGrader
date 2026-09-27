@@ -30,60 +30,75 @@
       if (c.bit) doc.rect(X(c.x - L.CODE_SIZE / 2), Y(c.y - L.CODE_SIZE / 2), L.CODE_SIZE, L.CODE_SIZE, 'F');
     }
 
+    // Student code strip (personalised sheets only).
+    if (student && student.key) {
+      L.encodeKey(student.key).forEach((bit, i) => {
+        const p = layout.keyStrip[i];
+        if (bit) doc.rect(X(p.x - L.CODE_SIZE / 2), Y(p.y - L.CODE_SIZE / 2), L.CODE_SIZE, L.CODE_SIZE, 'F');
+      });
+    }
+
     const leftW = idDigits ? layout.idX0 - 14 : L.FRAME_W;
 
     // Title.
     doc.setFont('helvetica', 'bold');
     doc.text(fitText(doc, title || 'Multiple Choice Exam', leftW, 15, 9), X(0), Y(11));
 
-    // Name / section lines.
+    // Name, name.# and section lines.
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text('Name', X(0), Y(20));
     doc.setLineWidth(0.25);
+    doc.text('Name', X(0), Y(20));
     doc.line(X(11), Y(20.8), X(leftW), Y(20.8));
-    doc.text('Section', X(0), Y(28));
-    doc.line(X(14), Y(28.8), X(leftW * 0.6), Y(28.8));
-    doc.text('Date', X(leftW * 0.6 + 3), Y(28));
-    doc.line(X(leftW * 0.6 + 12), Y(28.8), X(leftW), Y(28.8));
+    const split = leftW * 0.5;
+    doc.text('Name.#', X(0), Y(28));
+    doc.line(X(13.5), Y(28.8), X(split), Y(28.8));
+    doc.text('Section', X(split + 3), Y(28));
+    doc.line(X(split + 16), Y(28.8), X(leftW), Y(28.8));
     if (student) {
       doc.setFont('helvetica', 'bold');
       doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(19.8));
+      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(27.8));
       doc.setFont('helvetica', 'normal');
-      if (student.section) doc.text(fitText(doc, student.section, leftW * 0.6 - 16, 10, 7), X(15), Y(27.8));
+      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(27.8));
+    }
+
+    // Last-name initial bubbles.
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.text('FIRST LETTER OF LAST NAME', X(layout.initials[0].x - L.BUBBLE_R), Y(34.6));
+    doc.setFont('helvetica', 'normal');
+    for (const b of layout.initials) bubble(doc, X(b.x), Y(b.y), b.letter, student && student.initial === b.letter);
+
+    // Fill example beside the initial block.
+    const exX = layout.initials[12].x + 7;
+    if (leftW - exX > 30) {
+      doc.setFontSize(7);
+      doc.setTextColor(40);
+      doc.text('Fill bubbles like this:', X(exX), Y(39.3));
+      doc.setFillColor(0, 0, 0);
+      doc.circle(X(exX) + doc.getTextWidth('Fill bubbles like this:') + 3, Y(38.6), L.BUBBLE_R, 'F');
+      doc.text('Use a dark pencil or black/blue pen.', X(exX), Y(43.9));
+      doc.setTextColor(0);
     }
 
     // Instructions.
-    doc.setDrawColor(150);
+    doc.setDrawColor(60);
     doc.setLineWidth(0.2);
-    doc.roundedRect(X(0), Y(33), leftW, 30, 1.5, 1.5, 'S');
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text('INSTRUCTIONS', X(3), Y(38));
+    doc.roundedRect(X(0), Y(47.5), leftW, 19.5, 1.5, 1.5, 'S');
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
     const lines = [
-      'Use a dark pencil or black/blue pen. Fill each bubble completely:',
-      'Mark only one answer per question. Erase changes completely.',
-      student ? 'Your student ID is pre-filled at right. Do not change it.'
-              : (idDigits ? 'Write your student ID in the boxes at right and fill the matching bubbles.' : ''),
-      'Do not fold this sheet or write on or near the black squares.',
-    ].filter(Boolean);
-    lines.forEach((t, i) => doc.text(t, X(3), Y(43 + i * 4.6)));
-    // Filled / wrong examples next to line 1.
-    const ex = X(3) + doc.getTextWidth(lines[0]) + 3;
-    doc.setDrawColor(0);
-    doc.setFillColor(0, 0, 0);
-    doc.circle(ex, Y(42.3), L.BUBBLE_R * 0.8, 'F');
-    doc.setTextColor(120);
-    doc.setFontSize(6.5);
-    doc.text('like this', ex + 2.5, Y(43));
-    doc.setTextColor(0);
-
-    doc.setFontSize(6.5);
-    doc.setTextColor(90);
-    doc.text(`${numQuestions} questions · choices ${L.LETTERS[0]}–${L.LETTERS[numChoices - 1]}`, X(3), Y(61));
-    doc.setTextColor(0);
+      'Fill each bubble completely. Mark one answer per question unless it says "select all that apply".',
+      student ? 'Your name, name.# number and last-name initial are pre-filled. Do not change them.'
+        : (idDigits ? 'Write your name.# above. Bubble its number at right and the first letter of your last name.'
+          : 'Write your name above and bubble the first letter of your last name.'),
+      'Erase changes completely. Do not fold this sheet.',
+      'Do not write on or near the black squares.',
+    ];
+    lines.forEach((t, i) => {
+      const fitted = fitText(doc, t, leftW - 6, 7.5, 5.5);
+      doc.text(fitted, X(3), Y(52 + i * 4.2));
+    });
 
     // Student ID grid.
     if (idDigits) {
@@ -92,11 +107,11 @@
       const w = idDigits * L.ID_DX;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
-      doc.text('STUDENT ID', x0 + w / 2 + ox, Y(top - 2), { align: 'center' });
+      doc.text(fitText(doc, 'NAME.# NUMBER', w + 4, 8, 5.5), X(x0 + w / 2 - 2.25), Y(top - 2), { align: 'center' });
       doc.setFont('helvetica', 'normal');
       doc.setDrawColor(0);
       doc.setLineWidth(0.25);
-      const idStr = student ? String(student.id).padStart(idDigits, '0') : '';
+      const idStr = student && student.num ? String(student.num).padStart(idDigits, '0') : '';
       layout.id.forEach((col, j) => {
         doc.rect(X(col.x - L.ID_DX / 2), Y(top), L.ID_DX, L.ID_BOX_H, 'S');
         if (idStr) {
@@ -104,10 +119,10 @@
           doc.text(idStr[j], X(col.x), Y(top + L.ID_BOX_H / 2), { align: 'center', baseline: 'middle' });
         }
       });
-      doc.setDrawColor(150);
+      doc.setDrawColor(60);
       doc.rect(X(x0 - 5), Y(top - 5.5), w + 5.5, L.ID_TOP + 9 * L.ID_DY + 3 - (top - 5.5), 'S');
       doc.setFontSize(7);
-      doc.setTextColor(90);
+      doc.setTextColor(40);
       for (let d = 0; d < 10; d++) doc.text(String(d), X(x0 - 2.5), Y(L.ID_TOP + d * L.ID_DY), { align: 'center', baseline: 'middle' });
       doc.setTextColor(0);
       layout.id.forEach((col, j) => {
@@ -135,16 +150,18 @@
 
     // Footer.
     doc.setFontSize(6.5);
-    doc.setTextColor(120);
-    const footer = [title || null, student ? `${student.name} (${student.id})` : null, pageLabel]
+    doc.setTextColor(60);
+    const footer = [title || null, student ? `${student.name}${student.id ? ` (${student.id})` : ''}` : null,
+      `${numQuestions} questions, choices ${L.LETTERS[0]} to ${L.LETTERS[numChoices - 1]}`, pageLabel]
       .filter(Boolean).join('  ·  ');
     doc.text(footer, X(L.FRAME_W / 2), Y(layout.lastRowY + 8), { align: 'center' });
     doc.setTextColor(0);
   }
 
+  // High-contrast bubbles: thick black outline and AA-contrast letters.
   function bubble(doc, cx, cy, label, filled) {
-    doc.setLineWidth(0.25);
-    doc.setDrawColor(70);
+    doc.setLineWidth(0.35);
+    doc.setDrawColor(0);
     if (filled) {
       doc.setFillColor(0, 0, 0);
       doc.circle(cx, cy, L.BUBBLE_R, 'FD');
@@ -152,9 +169,9 @@
     }
     doc.circle(cx, cy, L.BUBBLE_R, 'S');
     if (label) {
-      doc.setFontSize(5.5);
-      doc.setTextColor(150);
-      doc.text(label, cx, cy + 0.05, { align: 'center', baseline: 'middle' });
+      doc.setFontSize(6);
+      doc.setTextColor(112);  // #707070: 4.9:1 on white (WCAG AA) but light enough not to read as a mark
+      doc.text(label, cx, cy + 0.08, { align: 'center', baseline: 'middle' });
       doc.setTextColor(0);
     }
   }

@@ -9,7 +9,6 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const normId = (s) => String(s ?? '').replace(/^0+(?=\d)/, '');
   const pct = (v) => (Math.round(v * 10) / 10).toFixed(1);
   const fmtPts = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, ''));
   const today = () => new Date().toISOString().slice(0, 10);
@@ -49,7 +48,7 @@
   const session = { images: new Map(), log: [] };  // images: resultId -> {url, w, h, scale, H, read, rotated}
   const exam = () => data.exams.find((e) => e.id === data.activeExamId);
   const save = (now) => S.save(data, now);
-  window.addEventListener('store-error', () => toast('Could not save — browser storage is full or disabled. Download a backup!', 'error'));
+  window.addEventListener('store-error', () => toast('Could not save: browser storage is full or disabled. Download a backup!', 'error'));
 
   let keyCache = { sig: null, key: null };
   function getKey() {
@@ -59,36 +58,75 @@
     return keyCache.key;
   }
 
-  function rosterIndex() {
-    const m = new Map();
-    for (const s of data.roster) if (s.id) m.set(normId(s.id), s);
-    return m;
+  function rosterByKey() {
+    return new Map(data.roster.map((st) => [st.key, st]));
+  }
+
+  /**
+   * Returns a function that finds the roster student for a scanned result.
+   * Order: a student picked by hand, then the code strip on personalised sheets,
+   * then the bubbled name.# number narrowed by the last-name initial.
+   */
+  function buildMatcher() {
+    const byKey = rosterByKey();
+    const byNum = new Map();
+    for (const st of data.roster) {
+      const p = S.idParts(st);
+      if (!p.num) continue;
+      if (!byNum.has(p.num)) byNum.set(p.num, []);
+      byNum.get(p.num).push({ st, initial: p.initial });
+    }
+    return (r) => {
+      if (r.manual) {
+        const st = byKey.get(r.studentKey);
+        return st ? { student: st, how: 'picked by hand' } : { issue: 'the student picked for this sheet was removed from the roster', candidates: [] };
+      }
+      const num = r.num || '';
+      if (r.sheetKey) {
+        const st = byKey.get(r.sheetKey);
+        // Only trust the code if it agrees with the pre-filled number (guards against a re-created roster).
+        if (st && (!num || S.idParts(st).num === num)) return { student: st, how: 'sheet code' };
+      }
+      if (!num) return { issue: data.roster.length ? 'no name.# number bubbled' : '', candidates: [] };
+      if (num.includes('?')) return { issue: 'name.# number unclear', candidates: [] };
+      const cands = byNum.get(num) || [];
+      if (!cands.length) return { issue: data.roster.length ? `.${num} is not in the roster` : '', candidates: [] };
+      const init = r.initial && r.initial !== '?' ? r.initial : '';
+      const narrowed = init ? cands.filter((c) => c.initial === init) : cands;
+      if (narrowed.length === 1) return { student: narrowed[0].st, how: 'name.#' };
+      if (!narrowed.length && cands.length === 1) {
+        return { student: cands[0].st, how: 'name.#', issue: `initial ${init} does not match ${cands[0].st.id}` };
+      }
+      const list = narrowed.length ? narrowed : cands;
+      return { issue: `could be ${list.map((c) => c.st.id || c.st.name).join(' or ')}`, candidates: list.map((c) => c.st) };
+    };
+  }
+
+  function readIdLabel(r) {
+    if (!r.num && !r.initial) return '';
+    return `${r.initial || '?'}….${r.num || '?'}`;
   }
 
   function scoreOf(r) {
-    return G.scoreAnswers(r.answers, getKey(), exam().numQuestions);
+    const ex = exam();
+    return G.scoreAnswers(r.answers, getKey(), ex.numQuestions, ex.multiScoring || 'exact');
   }
 
   /** Derived status info for every result in the active exam. */
   function annotateResults() {
-    const idx = rosterIndex();
+    const match = buildMatcher();
+    const rows = exam().results.map((r) => ({ r, m: match(r) }));
     const counts = new Map();
-    for (const r of exam().results) {
-      const k = normId(r.studentId);
-      if (k) counts.set(k, (counts.get(k) || 0) + 1);
-    }
-    return exam().results.map((r) => {
-      const k = normId(r.studentId);
-      const student = k ? idx.get(k) : null;
+    for (const { m } of rows) if (m.student) counts.set(m.student.key, (counts.get(m.student.key) || 0) + 1);
+    return rows.map(({ r, m }) => {
+      const student = m.student || null;
       const issues = [];
-      if (!r.studentId) issues.push('no ID');
-      else if (r.studentId.includes('?')) issues.push('ID unclear');
-      else if (!student && data.roster.length) issues.push('ID not in roster');
-      if (k && counts.get(k) > 1) issues.push('duplicate');
+      if (m.issue) issues.push(m.issue);
+      if (student && counts.get(student.key) > 1) issues.push('duplicate');
       const nFlags = (r.flags || []).length;
-      if (nFlags) issues.push(`${nFlags} question${nFlags > 1 ? 's' : ''} to check`);
+      if (nFlags) issues.push(`${nFlags} item${nFlags > 1 ? 's' : ''} to check`);
       for (const w of r.warnings || []) issues.push(w);
-      return { r, student, issues, sc: scoreOf(r), sid: student ? student.id : r.studentId };
+      return { r, student, candidates: m.candidates || [], how: m.how, issues, sc: scoreOf(r), sid: student ? student.id || '(no name.#)' : readIdLabel(r) };
     });
   }
 
@@ -129,13 +167,14 @@
     $('#exQuestions').value = ex.numQuestions;
     $('#exChoices').value = ex.numChoices;
     $('#exDigits').value = ex.idDigits;
+    $('#exMulti').value = ex.multiScoring || 'exact';
     $('#exPaper').value = ex.paper;
     $('#exErrors').textContent = '';
     const cap = L.maxQuestions(ex.numChoices);
     let hint = `One sheet holds up to ${cap} questions with ${ex.numChoices} choices.`;
-    const maxRosterId = data.roster.reduce((m, s) => Math.max(m, s.id.length), 0);
-    if (maxRosterId > ex.idDigits) hint += ` ⚠ Some roster IDs have ${maxRosterId} digits — increase "Student ID digits".`;
-    if (ex.results.length) hint += ` ${ex.results.length} sheet(s) already graded — sheets record their own layout, so reprint if you change the layout.`;
+    const maxNum = data.roster.reduce((m, st) => Math.max(m, S.idParts(st).num.length), 0);
+    if (maxNum > ex.idDigits) hint += ` ⚠ Some name.# numbers have ${maxNum} digits. Increase "Name.# number digits".`;
+    if (ex.results.length) hint += ` ${ex.results.length} sheet(s) already graded. Sheets record their own layout, so reprint if you change the layout.`;
     $('#exCapacity').textContent = hint;
     $('#exDelete').disabled = data.exams.length < 2;
     const kb = S.bytesUsed() / 1024;
@@ -152,6 +191,7 @@
     const errs = L.validateConfig(cfg);
     ex.title = $('#exTitle').value.trim() || 'Untitled exam';
     ex.paper = $('#exPaper').value;
+    ex.multiScoring = $('#exMulti').value;
     if (errs.length) {
       $('#exErrors').textContent = errs.join(' ');
       save();
@@ -163,12 +203,12 @@
     renderExamPicker();
     renderExam();
   }
-  ['#exTitle', '#exQuestions', '#exChoices', '#exDigits', '#exPaper'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exTitle', '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);
     const cur = exam();
-    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, idDigits: cur.idDigits, paper: cur.paper });
+    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, idDigits: cur.idDigits, paper: cur.paper, multiScoring: cur.multiScoring });
     data.exams.push(e);
     data.activeExamId = e.id;
     save();
@@ -234,20 +274,25 @@
   // ---------- roster ----------
   function rosterProblems() {
     const ex = exam();
-    const seen = new Map();
+    const seenId = new Map();
     const dup = new Set();
+    const pairs = new Map();
     let missing = 0, long = 0;
-    for (const s of data.roster) {
-      if (!s.id) { missing++; continue; }
-      const k = normId(s.id);
-      if (seen.has(k)) dup.add(s.id);
-      seen.set(k, s);
-      if (s.id.length > ex.idDigits) long++;
+    for (const st of data.roster) {
+      if (!st.id) { missing++; continue; }
+      if (seenId.has(st.id)) dup.add(st.id);
+      seenId.set(st.id, st);
+      const p = S.idParts(st);
+      if (p.num.length > ex.idDigits) long++;
+      const k = `${p.initial}.${p.num}`;
+      pairs.set(k, [...(pairs.get(k) || []), st]);
     }
+    const twins = [...pairs.values()].filter((l) => l.length > 1);
     const out = [];
-    if (missing) out.push(`${missing} student(s) have no ID — they can't be matched to scans (use "Number students without an ID").`);
-    if (dup.size) out.push(`Duplicate IDs: ${[...dup].join(', ')}.`);
-    if (long) out.push(`${long} ID(s) are longer than the ${ex.idDigits} digits on this exam's sheet.`);
+    if (missing) out.push(`${missing} student(s) have no name.#. Their personalised sheets still match; on blank sheets pick them by hand in review.`);
+    if (dup.size) out.push(`Listed twice: ${[...dup].join(', ')}.`);
+    if (twins.length) out.push(`Same number and same last-name initial: ${twins.map((l) => l.map((st) => st.id).join(' / ')).join('; ')}. Use personalised sheets for them, or pick by hand in review.`);
+    if (long) out.push(`${long} name.# number(s) are longer than the ${ex.idDigits} digits on this exam's sheet.`);
     return { text: out.join(' '), dup };
   }
 
@@ -257,13 +302,13 @@
     $('#rosterCount').textContent = `${data.roster.length} / ${S.MAX_STUDENTS}`;
     $('#rosterWarn').textContent = text;
     const rows = data.roster
-      .map((s, i) => ({ s, i }))
-      .filter(({ s }) => !f || `${s.id} ${s.name} ${s.section}`.toLowerCase().includes(f));
-    $('#rosterTable tbody').innerHTML = rows.map(({ s, i }) => `
-      <tr data-i="${i}" class="${dup.has(s.id) || !s.id ? 'bad' : ''}">
-        <td><input data-f="id" value="${esc(s.id)}" inputmode="numeric" aria-label="ID"></td>
-        <td><input data-f="name" value="${esc(s.name)}" aria-label="Name"></td>
-        <td><input data-f="section" value="${esc(s.section)}" aria-label="Section"></td>
+      .map((st, i) => ({ st, i }))
+      .filter(({ st }) => !f || `${st.id} ${st.name} ${st.section}`.toLowerCase().includes(f));
+    $('#rosterTable tbody').innerHTML = rows.map(({ st, i }) => `
+      <tr data-i="${i}" class="${dup.has(st.id) ? 'bad' : ''}">
+        <td><input data-f="id" value="${esc(st.id)}" placeholder="smith.12" aria-label="Name.#"></td>
+        <td><input data-f="name" value="${esc(st.name)}" aria-label="Name"></td>
+        <td><input data-f="section" value="${esc(st.section)}" aria-label="Section"></td>
         <td><button class="icon" data-del title="Remove">✕</button></td>
       </tr>`).join('') || `<tr><td colspan="4" class="empty">No students yet.</td></tr>`;
   }
@@ -271,19 +316,21 @@
   $('#rosterTable').addEventListener('change', (e) => {
     const tr = e.target.closest('tr[data-i]');
     if (!tr || !e.target.dataset.f) return;
-    const s = data.roster[+tr.dataset.i];
+    const st = data.roster[+tr.dataset.i];
     let v = e.target.value.trim();
     if (e.target.dataset.f === 'id') {
-      v = v.replace(/\D/g, '');
+      v = S.normalizeId(v);
       e.target.value = v;
     }
-    s[e.target.dataset.f] = v;
+    st[e.target.dataset.f] = v;
     save();
     renderRoster();
   });
   $('#rosterTable').addEventListener('click', (e) => {
     if (!e.target.matches('[data-del]')) return;
     const i = +e.target.closest('tr').dataset.i;
+    const st = data.roster[i];
+    if (!confirm(`Remove ${st.name}${st.id ? ` (${st.id})` : ''} from the roster?`)) return;
     data.roster.splice(i, 1);
     save();
     renderRoster();
@@ -292,50 +339,58 @@
     e.preventDefault();
     const fd = new FormData(e.target);
     if (data.roster.length >= S.MAX_STUDENTS) return toast(`The roster is limited to ${S.MAX_STUDENTS} students.`, 'error');
-    const id = String(fd.get('id') || '').replace(/\D/g, '');
-    if (id && rosterIndex().has(normId(id))) return toast(`ID ${id} is already used.`, 'error');
+    const id = S.normalizeId(fd.get('id'));
+    if (id && data.roster.some((st) => st.id === id)) return toast(`${id} is already on the roster.`, 'error');
     data.roster.push({ id, name: String(fd.get('name')).trim(), section: String(fd.get('section') || '').trim() });
+    S.assignKeys(data.roster);
     save();
     e.target.reset();
     e.target.elements.id.focus();
     renderRoster();
   });
 
+  const looksLikeId = (v) => /^[a-z][a-z'\-]*\.\d+(@\S+)?$/i.test(v.trim()) || /^\d+$/.test(v.trim());
+
   function importRows(rows) {
     if (!rows.length) return toast('Nothing to import.', 'error');
     const head = rows[0].map((c) => c.trim().toLowerCase());
-    const find = (...names) => head.findIndex((h) => names.some((n) => h === n || h.replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, '')));
-    let ci = { id: find('id', 'student id', 'studentid', 'student number', 'number', 'no'), name: find('name', 'full name', 'student', 'student name'),
-      first: find('first', 'first name', 'firstname', 'given name'), last: find('last', 'last name', 'lastname', 'surname', 'family name'),
-      section: find('section', 'class', 'period', 'group', 'course') };
+    const findRe = (re, not) => head.findIndex((h, i) => i !== not && re.test(h));
+    const idCol = findRe(/name\s*\.\s*(#|n\b|num)|name_n|^dot|user\s*name|^user$|e-?mail|^id$|student\s*id|^number$|^no\.?$/);
+    let ci = {
+      id: idCol,
+      name: findRe(/^(name|full name|student|student name)$/, idCol),
+      first: findRe(/^(first|first name|firstname|given name)$/),
+      last: findRe(/^(last|last name|lastname|surname|family name)$/),
+      section: findRe(/^(section|class|period|group|course)$/),
+    };
     const hasHeader = Object.values(ci).some((v) => v >= 0);
     if (hasHeader) rows = rows.slice(1);
-    else {
-      // No header: guess "id, name, section" or "name, section" by whether column 1 is numeric.
-      const numericFirst = rows.every((r) => /^\s*\d*\s*$/.test(r[0]));
-      ci = numericFirst ? { id: 0, name: 1, first: -1, last: -1, section: 2 } : { id: -1, name: 0, first: -1, last: -1, section: 1 };
-    }
+    else if (rows.every((r) => !r[0].trim() || looksLikeId(r[0]))) ci = { id: 0, name: 1, first: -1, last: -1, section: 2 };
+    else if (rows.every((r) => !r[1] || !r[1].trim() || looksLikeId(r[1]))) ci = { id: 1, name: 0, first: -1, last: -1, section: 2 };
+    else ci = { id: -1, name: 0, first: -1, last: -1, section: 1 };
     const incoming = rows.map((r) => {
       const get = (i) => (i >= 0 && r[i] != null ? r[i].trim() : '');
       let name = get(ci.name);
       if (!name && (ci.first >= 0 || ci.last >= 0)) name = [get(ci.first), get(ci.last)].filter(Boolean).join(' ');
-      return { id: get(ci.id).replace(/\D/g, ''), name, section: get(ci.section) };
-    }).filter((s) => s.name || s.id);
+      return { id: S.normalizeId(get(ci.id)), name, section: get(ci.section) };
+    }).filter((st) => st.name || st.id);
 
     const replace = $('#rosterReplace').checked;
+    const old = new Map(data.roster.filter((st) => st.id).map((st) => [st.id, st]));
     const base = replace ? [] : data.roster.slice();
-    const idx = new Map(base.filter((s) => s.id).map((s) => [normId(s.id), s]));
+    const idx = new Map(base.filter((st) => st.id).map((st) => [st.id, st]));
     let added = 0, updated = 0, skipped = 0;
-    for (const s of incoming) {
-      if (!s.name) s.name = `Student ${s.id}`;
-      const k = s.id && normId(s.id);
-      if (k && idx.has(k)) { Object.assign(idx.get(k), s); updated++; continue; }
+    for (const st of incoming) {
+      if (!st.name) st.name = st.id;
+      if (st.id && idx.has(st.id)) { Object.assign(idx.get(st.id), st); updated++; continue; }
       if (base.length >= S.MAX_STUDENTS) { skipped++; continue; }
-      base.push(s);
-      if (k) idx.set(k, s);
+      // Keep a returning student's key so already-printed personalised sheets still match.
+      if (st.id && old.has(st.id)) st.key = old.get(st.id).key;
+      base.push(st);
+      if (st.id) idx.set(st.id, st);
       added++;
     }
-    data.roster = base;
+    data.roster = S.assignKeys(base);
     save();
     renderRoster();
     toast(`Added ${added}, updated ${updated}${skipped ? `, skipped ${skipped} (limit ${S.MAX_STUDENTS})` : ''}.`, skipped ? 'error' : 'ok');
@@ -349,22 +404,8 @@
     e.target.value = '';
     if (f) importRows(G.parseCSV(await readFileText(f)));
   });
-  $('#rosterAutoId').addEventListener('click', () => {
-    const used = new Set(data.roster.filter((s) => s.id).map((s) => Number(s.id)));
-    let n = 1, count = 0;
-    for (const s of data.roster) {
-      if (s.id) continue;
-      while (used.has(n)) n++;
-      s.id = String(n);
-      used.add(n);
-      count++;
-    }
-    save();
-    renderRoster();
-    toast(count ? `Numbered ${count} student(s).` : 'Every student already has an ID.');
-  });
   $('#rosterExport').addEventListener('click', () => {
-    download(G.toCSV([['id', 'name', 'section'], ...data.roster.map((s) => [s.id, s.name, s.section])]), `roster-${today()}.csv`, 'text/csv');
+    download(G.toCSV([['name.#', 'name', 'section'], ...data.roster.map((st) => [st.id, st.name, st.section])]), `roster-${today()}.csv`, 'text/csv');
   });
   $('#rosterClear').addEventListener('click', () => {
     if (!data.roster.length || !confirm(`Remove all ${data.roster.length} students from the roster?`)) return;
@@ -374,6 +415,12 @@
   });
 
   // ---------- key ----------
+  /** "A/C" = either one; "A+C+D" = select all that apply. */
+  function keyLabel(it) {
+    const l = it.accept.split('').join(it.match === 'all' ? '+' : '/');
+    return it.match === 'all' && it.scoring ? `${l} (${it.scoring})` : l;
+  }
+
   function renderKey() {
     const ex = exam();
     const ta = $('#keyText');
@@ -387,9 +434,9 @@
     let html = '';
     for (let q = 0; q < ex.numQuestions; q++) {
       const it = key.items[q];
-      const label = !it ? '—' : it.mode === 'free' ? 'free' : it.mode === 'drop' ? 'drop' : it.accept.split('').join('/');
+      const label = !it ? '-' : it.mode === 'free' ? 'free' : it.mode === 'drop' ? 'drop' : keyLabel(it);
       const pts = it && it.mode !== 'drop' && it.points !== 1 ? `<small>${fmtPts(it.points)}pt</small>` : '';
-      html += `<div class="k ${!it ? 'none' : it.mode}"><b>${q + 1}</b><span>${label}</span>${pts}</div>`;
+      html += `<div class="k ${!it ? 'none' : it.mode} ${it && it.match === 'all' ? 'all' : ''}"><b>${q + 1}</b><span>${label}</span>${pts}</div>`;
     }
     $('#keyGrid').innerHTML = html;
   }
@@ -439,7 +486,7 @@
     if (secs.includes(cur)) sel.value = cur;
     const ex = exam();
     const n = sheetMode() === 'blank' ? Math.max(1, parseInt($('#sheetCopies').value, 10) || 1) : sheetStudents().length;
-    $('#sheetInfo').textContent = `"${ex.title}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits}-digit ID · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
+    $('#sheetInfo').textContent = `"${ex.title}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits}-digit name.# number · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
     $('#sheetError').textContent = '';
   }
   $$('input[name=sheetMode]').forEach((r) => r.addEventListener('change', renderSheets));
@@ -455,14 +502,13 @@
     if (sheetMode() === 'blank') {
       opts.copies = Math.min(500, Math.max(1, parseInt($('#sheetCopies').value, 10) || 1));
     } else {
-      if (!ex.idDigits) return err('Personalised sheets need a student ID on the sheet — set "Student ID digits" above 0.');
       const list = sheetStudents();
       if (!list.length) return err('No students in the roster (or section).');
-      const noId = list.filter((s) => !s.id);
-      if (noId.length) return err(`${noId.length} student(s) have no ID. Use "Number students without an ID" on the Students tab.`);
-      const long = list.filter((s) => s.id.length > ex.idDigits);
-      if (long.length) return err(`${long.length} ID(s) have more than ${ex.idDigits} digits (e.g. ${long[0].id}). Increase "Student ID digits".`);
-      opts.students = list;
+      S.assignKeys(data.roster);
+      const long = list.filter((st) => S.idParts(st).num.length > ex.idDigits);
+      if (long.length) return err(`${long.length} name.# number(s) have more than ${ex.idDigits} digits (e.g. ${long[0].id}). Increase "Name.# number digits" on the Exam tab.`);
+      save();
+      opts.students = list.map((st) => ({ ...st, ...S.idParts(st) }));
     }
     const btn = $('#sheetGenerate');
     btn.disabled = true;
@@ -550,7 +596,7 @@
     const gray = window.OMR.toGray(ctx.getImageData(0, 0, canvas.width, canvas.height));
     const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits });
     const T = thresholdFor(read);
-    const it = window.OMR.interpret(read, T);
+    const it = window.OMR.interpret(read, T, G.multiSelectSet(getKey()));
     const warnings = read.warnings.slice();
     const c = read.cfg;
     if (c.numQuestions !== ex.numQuestions || c.numChoices !== ex.numChoices || c.idDigits !== ex.idDigits) {
@@ -558,7 +604,7 @@
     }
     if (it.idProblem) it.flags.push({ q: 0, type: 'id' });
     const result = {
-      id: S.uid(), source, studentId: it.studentId, answers: fitAnswers(it.answers, ex.numQuestions),
+      id: S.uid(), source, num: S.stripZeros(it.studentId), initial: it.initial, sheetKey: read.key || 0, answers: fitAnswers(it.answers, ex.numQuestions),
       flags: it.flags.filter((f) => f.q <= ex.numQuestions), warnings, threshold: Math.round(T * 100) / 100,
       scannedAt: new Date().toISOString(),
     };
@@ -650,9 +696,9 @@
       const img = session.images.get(r.id);
       if (!img || r.edited) continue;
       const T = thresholdFor(img.read);
-      const it = window.OMR.interpret(img.read, T);
+      const it = window.OMR.interpret(img.read, T, G.multiSelectSet(getKey()));
       r.answers = fitAnswers(it.answers, exam().numQuestions);
-      if (!r.idEdited) r.studentId = it.studentId;
+      if (!r.idEdited) { r.num = S.stripZeros(it.studentId); r.initial = it.initial; }
       r.flags = it.flags.filter((f) => f.q <= exam().numQuestions);
       if (it.idProblem) r.flags.push({ q: 0, type: 'id' });
       r.threshold = Math.round(T * 100) / 100;
@@ -670,7 +716,7 @@
       const a = idx.get(l.resultId);
       if (!a) return '';
       return `<tr class="${a.issues.length ? 'warnrow' : ''}">
-        <td>${esc(l.source)}</td><td>${esc(a.sid || '—')}</td><td>${esc(a.student ? a.student.name : '')}</td>
+        <td>${esc(l.source)}</td><td>${esc(a.sid || '-')}</td><td>${esc(a.student ? a.student.name : '')}</td>
         <td>${fmtPts(a.sc.score)} / ${fmtPts(a.sc.possible)}</td>
         <td>${a.issues.length ? '⚑ ' + esc(a.issues.join('; ')) : '✓'}</td>
         <td><button data-review="${a.r.id}">Review</button></td></tr>`;
@@ -700,16 +746,16 @@
     const out = [];
     for (let q = 0; q < ex.numQuestions; q++) {
       const counts = new Array(ex.numChoices).fill(0);
-      let blank = 0, multi = 0, correct = 0, n = 0;
+      let blank = 0, multi = 0, credit = 0, n = 0;
       for (const { r, sc } of rows) {
         const a = r.answers[q] || '';
         if (!a) blank++;
         else if (a.length > 1) multi++;
-        else counts[L.LETTERS.indexOf(a)]++;
-        if (sc.perQ[q] != null) { n++; if (sc.perQ[q]) correct++; }
+        for (const c of a) counts[L.LETTERS.indexOf(c)]++;
+        if (sc.perQ[q] != null) { n++; credit += sc.perQ[q]; }
       }
       const it = key.items[q];
-      out.push({ q: q + 1, key: !it ? '' : it.mode === 'normal' ? it.accept : it.mode, pct: n ? (100 * correct) / n : null, counts, blank, multi });
+      out.push({ q: q + 1, key: !it ? '' : it.mode === 'normal' ? keyLabel(it) : it.mode, pct: n ? (100 * credit) / n : null, counts, blank, multi });
     }
     return out;
   }
@@ -719,8 +765,8 @@
     const rows = annotateResults();
     const key = getKey();
     const noKey = !key.items.some(Boolean);
-    $('#resultsWarn').textContent = noKey ? 'No answer key yet — scores are 0. Add the key on the Answer key tab; results update automatically.'
-      : key.errors.length ? 'The answer key has errors — see the Answer key tab.' : '';
+    $('#resultsWarn').textContent = noKey ? 'No answer key yet, so scores are 0. Add the key on the Answer key tab; results update automatically.'
+      : key.errors.length ? 'The answer key has errors. See the Answer key tab.' : '';
 
     const st = stats(rows.map((a) => a.sc.percent));
     const possible = rows[0] ? rows[0].sc.possible : 0;
@@ -739,7 +785,7 @@
 
     $('#resultsTable tbody').innerHTML = rows.map((a) => `
       <tr class="${a.issues.length ? 'warnrow' : ''}">
-        <td>${esc(a.sid || '—')}</td>
+        <td>${esc(a.sid || '-')}</td>
         <td>${a.student ? esc(a.student.name) : '<i class="muted">unknown</i>'}</td>
         <td>${esc(a.student ? a.student.section : '')}</td>
         <td>${fmtPts(a.sc.score)} / ${fmtPts(a.sc.possible)}</td>
@@ -757,7 +803,7 @@
     const items = itemAnalysis(rows);
     const letters = L.LETTERS.slice(0, ex.numChoices).split('');
     $('#itemTable').innerHTML = `<thead><tr><th>Q</th><th>Key</th><th>% correct</th>${letters.map((l) => `<th>${l}</th>`).join('')}<th>Blank</th><th>Multi</th></tr></thead><tbody>` +
-      items.map((i) => `<tr><td>${i.q}</td><td>${esc(i.key)}</td><td class="${i.pct != null && i.pct < 40 ? 'low' : ''}">${i.pct == null ? '—' : pct(i.pct)}</td>` +
+      items.map((i) => `<tr><td>${i.q}</td><td>${esc(i.key)}</td><td class="${i.pct != null && i.pct < 40 ? 'low' : ''}">${i.pct == null ? '-' : pct(i.pct)}</td>` +
         i.counts.map((c, k) => `<td class="${i.key.includes(letters[k]) ? 'keycell' : ''}">${c}</td>`).join('') +
         `<td>${i.blank}</td><td>${i.multi}</td></tr>`).join('') + '</tbody>';
   }
@@ -783,9 +829,9 @@
       const list = by.get(s);
       if (!list) return [s.id, s.name, s.section, '', '', '', 'missing'];
       const a = list[list.length - 1];
-      return [s.id, s.name, s.section, fmtPts(a.sc.score), fmtPts(a.sc.possible), pct(a.sc.percent), list.length > 1 ? 'duplicate scans — latest used' : (a.issues.length ? 'check' : 'graded')];
+      return [s.id, s.name, s.section, fmtPts(a.sc.score), fmtPts(a.sc.possible), pct(a.sc.percent), list.length > 1 ? 'duplicate scans, latest used' : (a.issues.length ? 'check' : 'graded')];
     });
-    for (const a of rows) if (!a.student) body.push([a.r.studentId, '', '', fmtPts(a.sc.score), fmtPts(a.sc.possible), pct(a.sc.percent), `unmatched sheet (${a.r.source})`]);
+    for (const a of rows) if (!a.student) body.push([a.sid, '', '', fmtPts(a.sc.score), fmtPts(a.sc.possible), pct(a.sc.percent), `unmatched sheet (${a.r.source})`]);
     download(G.toCSV([head, ...body]), `${slug(ex.title)}-gradebook-${today()}.csv`, 'text/csv');
   });
   $('#csvItems').addEventListener('click', () => {
@@ -812,9 +858,6 @@
     const r = exam().results.find((x) => x.id === id);
     if (!r) return;
     rv = { id, r, img: session.images.get(id) || null, image: null };
-    const sel = $('#rvStudent');
-    sel.innerHTML = '<option value="">—</option>' + data.roster.slice().sort((a, b) => a.name.localeCompare(b.name))
-      .filter((s) => s.id).map((s) => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.id)})</option>`).join('');
     if (!dlg.open) dlg.showModal();
     $('#rvCanvas').hidden = !rv.img;
     $('#rvNoImage').hidden = !!rv.img;
@@ -907,13 +950,22 @@
   function renderReviewSide() {
     const { r } = rv;
     const ex = exam();
-    const student = rosterIndex().get(normId(r.studentId));
+    const a = annotateResults().find((x) => x.r === r);
+    const student = a.student;
     const sc = scoreOf(r);
     $('#rvTitle').textContent = `Review · ${r.source}`;
-    const idInput = $('#rvId');
-    if (document.activeElement !== idInput) idInput.value = r.studentId || '';
-    $('#rvStudent').value = student ? student.id : '';
-    $('#rvName').textContent = student ? `${student.name}${student.section ? ' · ' + student.section : ''}` : (r.studentId ? 'ID not found in roster' : 'No ID read');
+    if (document.activeElement !== $('#rvNum')) $('#rvNum').value = r.num || '';
+    if (document.activeElement !== $('#rvInit')) $('#rvInit').value = r.initial || '';
+    const opt = (st) => `<option value="${st.key}">${esc(st.name)}${st.id ? ` (${esc(st.id)})` : ''}</option>`;
+    const sorted = data.roster.slice().sort((x, y) => x.name.localeCompare(y.name));
+    const sel = $('#rvStudent');
+    sel.innerHTML = `<option value="auto">Automatic (from the sheet)</option>` +
+      (a.candidates.length ? `<optgroup label="Possible matches">${a.candidates.map(opt).join('')}</optgroup>` : '') +
+      `<optgroup label="All students">${sorted.map(opt).join('')}</optgroup>`;
+    sel.value = r.manual ? String(r.studentKey) : 'auto';
+    $('#rvName').textContent = student
+      ? `${student.name}${student.id ? ` (${student.id})` : ''}${student.section ? ' · ' + student.section : ''} · matched by ${a.how}`
+      : (a.issues[0] || 'No student matched') + '. Pick the student below.';
     $('#rvName').className = 'rv-name ' + (student ? '' : 'bad');
     $('#rvScore').textContent = `Score ${fmtPts(sc.score)} / ${fmtPts(sc.possible)} (${pct(sc.percent)}%)`;
     const key = getKey();
@@ -923,7 +975,8 @@
       const it = key.items[q];
       const a = r.answers[q] || '';
       const ok = sc.perQ[q];
-      html += `<div class="rq ${flagged.has(q + 1) ? 'flag' : ''} ${ok === true ? 'ok' : ok === false ? 'no' : ''}"><b>${q + 1}</b>`;
+      const cls = ok == null ? '' : ok === 1 ? 'ok' : ok === 0 ? 'no' : 'part';
+      html += `<div class="rq ${flagged.has(q + 1) ? 'flag' : ''} ${cls}" title="${it && it.match === 'all' ? 'Select all that apply' : ''}"><b>${q + 1}${it && it.match === 'all' ? '+' : ''}</b>`;
       for (let i = 0; i < ex.numChoices; i++) {
         const l = L.LETTERS[i];
         const k = it && it.mode === 'normal' && it.accept.includes(l);
@@ -932,7 +985,7 @@
       html += '</div>';
     }
     $('#rvAnswers').innerHTML = html;
-    const names = { multiple: 'more than one bubble marked', erasure: 'possible erasure — darkest mark used', faint: 'faint or partial mark', id: 'student ID bubbles unclear' };
+    const names = { multiple: 'more than one bubble marked', erasure: 'possible erasure, darkest mark used', faint: 'faint or partial mark', id: 'name.# number or initial bubbles unclear' };
     const items = (r.flags || []).map((f) => `<li>${f.q ? 'Q' + f.q : 'ID'}: ${names[f.type] || f.type}</li>`)
       .concat((r.warnings || []).map((w) => `<li>${esc(w)}</li>`));
     $('#rvFlags').innerHTML = items.join('') + (items.length ? '<li><button type="button" id="rvClearFlags">Mark reviewed (clear flags)</button></li>' : '');
@@ -950,15 +1003,23 @@
     drawReview();
     renderReviewSide();
   });
-  function setReviewId(v) {
-    rv.r.studentId = v.replace(/[^\d?]/g, '');
+  function setReviewRead() {
+    rv.r.num = S.stripZeros($('#rvNum').value.replace(/[^\d?]/g, ''));
+    rv.r.initial = $('#rvInit').value.replace(/[^a-z?]/gi, '').slice(0, 1).toUpperCase();
     rv.r.idEdited = true;
     rv.r.flags = (rv.r.flags || []).filter((f) => f.q !== 0);
     save();
     renderReviewSide();
   }
-  $('#rvId').addEventListener('change', (e) => setReviewId(e.target.value));
-  $('#rvStudent').addEventListener('change', (e) => { if (e.target.value) setReviewId(e.target.value); });
+  $('#rvNum').addEventListener('change', setReviewRead);
+  $('#rvInit').addEventListener('change', setReviewRead);
+  $('#rvStudent').addEventListener('change', (e) => {
+    const r = rv.r;
+    if (e.target.value === 'auto') { r.manual = false; delete r.studentKey; }
+    else { r.manual = true; r.studentKey = Number(e.target.value); r.flags = (r.flags || []).filter((f) => f.q !== 0); }
+    save();
+    renderReviewSide();
+  });
   $('#rvUseAsKey').addEventListener('click', () => {
     const ex = exam();
     if (ex.keyText.trim() && !confirm('Replace the current answer key with the answers on this sheet?')) return;
@@ -966,7 +1027,7 @@
     save();
     renderReviewSide();
     drawReview();
-    toast('Answer key replaced. Blank questions were marked as dropped (-).', 'ok');
+    toast('Answer key replaced. Blank questions are dropped; questions with several marks became select-all-that-apply.', 'ok');
   });
   $('#rvDelete').addEventListener('click', () => {
     if (!confirm('Delete this scanned sheet from the results?')) return;
@@ -1011,5 +1072,5 @@
   showTab($(`.tabs [data-tab="${first}"]`) ? first : 'exam');
 
   // Hooks for automated tests.
-  window.__omrApp = { get data() { return data; }, processFiles, session };
+  window.__omrApp = { get data() { return data; }, processFiles, session, annotate: annotateResults, openReview };
 })();

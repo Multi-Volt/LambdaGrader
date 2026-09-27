@@ -1,14 +1,15 @@
-# Sample answer key for a 20-question exam (A–E)
+# Sample answer key for a 20-question exam (choices A to E)
 # Format: question number, answer, optional points. Lines starting with # are ignored.
 1. B
 2. D
 3. A
 4. C
 5. E
-6. B 2        # worth 2 points
-7. A,C        # either A or C accepted
-8. D
-9. *          # free question — everyone gets credit
-10. -         # dropped — not scored
+6. B 2           # worth 2 points
+7. A/C           # either A or C is accepted
+8. ACD           # select all that apply: A, C and D must all be marked
+9. BE 2 partial  # select all that apply, 2 points, partial credit
+10. *            # free question: everyone gets credit
+11. -            # dropped: not scored
 # Unnumbered letters continue from the last question:
 BCADE CABDE

@@ -1,6 +1,6 @@
-id,name,section
-1001,Ada Lovelace,Period 1
-1002,Alan Turing,Period 1
-1003,Grace Hopper,Period 2
-1004,Katherine Johnson,Period 2
-,Edsger Dijkstra,Period 2
+name.#,name,section
+lovelace.12,Ada Lovelace,Period 1
+turing.12,Alan Turing,Period 1
+hopper.7,Grace Hopper,Period 2
+johnson.31,Katherine Johnson,Period 2
+jones.7,Megan Jones,Period 2

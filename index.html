@@ -48,7 +48,7 @@
             <label>Choices per question
               <select id="exChoices"></select>
             </label>
-            <label>Student ID digits
+            <label>Name.# number digits
               <input id="exDigits" type="number" min="0" max="10">
             </label>
             <label>Paper
@@ -58,6 +58,12 @@
               </select>
             </label>
           </div>
+          <label>Select-all-that-apply questions
+            <select id="exMulti">
+              <option value="exact">All or nothing: must mark exactly the right bubbles</option>
+              <option value="partial">Partial credit: (right marks - wrong marks) / right answers</option>
+            </select>
+          </label>
           <p id="exCapacity" class="hint"></p>
           <p id="exErrors" class="error"></p>
           <div class="btns">
@@ -70,13 +76,13 @@
         <div class="card">
           <h2>How it works</h2>
           <ol class="steps">
-            <li><b>Students</b> — import or type your roster (up to 400).</li>
-            <li><b>Answer key</b> — type the key as plain text, e.g. <code>1. B</code>.</li>
-            <li><b>Bubble sheets</b> — print blank sheets, or personalised sheets with each student's name and ID pre-filled.</li>
-            <li><b>Scan &amp; grade</b> — scan the completed sheets to a PDF (any resolution ≥ 150 dpi) and drop it in.</li>
-            <li><b>Results</b> — review flagged sheets, then download the CSV.</li>
+            <li><b>Students:</b> import or type your roster of name.# IDs (up to 400).</li>
+            <li><b>Answer key:</b> type the key as plain text, e.g. <code>1. B</code>, or <code>2. ACD</code> for select all that apply.</li>
+            <li><b>Bubble sheets:</b> print blank sheets, or personalised sheets with each student's name and name.# pre-filled.</li>
+            <li><b>Scan &amp; grade:</b> scan the completed sheets to a PDF (150 dpi or better) and drop it in.</li>
+            <li><b>Results:</b> review flagged sheets, then download the CSV.</li>
           </ol>
-          <p class="privacy">🔒 Everything — roster, keys, scans, scores — stays on this computer, in this browser.
+          <p class="privacy">🔒 Everything (roster, keys, scans, scores) stays on this computer, in this browser.
             No data is uploaded anywhere. Use <b>Backup</b> to move your data to another browser.</p>
           <h3>Data</h3>
           <div class="btns">
@@ -100,12 +106,12 @@
           <p id="rosterWarn" class="warn"></p>
           <div class="table-wrap tall">
             <table id="rosterTable" class="data">
-              <thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th></th></tr></thead>
+              <thead><tr><th>Name.#</th><th>Name</th><th>Section</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
           <form id="rosterAdd" class="row add-row">
-            <input name="id" placeholder="ID (digits)" inputmode="numeric" pattern="\d*">
+            <input name="id" placeholder="Name.# (smith.12)" autocomplete="off">
             <input name="name" placeholder="Name" required>
             <input name="section" placeholder="Section (optional)">
             <button type="submit">Add</button>
@@ -113,10 +119,12 @@
         </div>
         <div class="card">
           <h2>Import</h2>
-          <p class="hint">Paste from a spreadsheet or load a CSV. Columns: <code>id, name, section</code>
-            (a header row with <i>id</i>, <i>name</i> / <i>first</i> / <i>last</i>, <i>section</i> is recognised).
-            Students without an ID can be numbered automatically.</p>
-          <textarea id="rosterPaste" rows="8" placeholder="1001, Ada Lovelace, Period 2&#10;1002, Alan Turing, Period 2"></textarea>
+          <p class="hint">Paste from a spreadsheet or load a CSV. Columns: <code>name.#, name, section</code>.
+            A header row with <i>name.#</i> (or <i>username</i>, <i>email</i>, <i>id</i>), <i>name</i> (or <i>first</i> / <i>last</i>) and <i>section</i> is recognised.
+            Emails like <code>smith.12@school.edu</code> are trimmed to <code>smith.12</code>.</p>
+          <p class="hint">Numbers after the dot can repeat (<code>smith.12</code> and <code>jones.12</code>). Sheets tell them apart with a
+            last-name initial bubble, and personalised sheets also carry a hidden code that always matches the exact student.</p>
+          <textarea id="rosterPaste" rows="8" placeholder="lovelace.12, Ada Lovelace, Period 2&#10;turing.12, Alan Turing, Period 2"></textarea>
           <div class="btns">
             <button id="rosterImportPaste">Add pasted rows</button>
             <label class="button">Load CSV…<input id="rosterFile" type="file" accept=".csv,.txt,text/csv" hidden></label>
@@ -124,11 +132,10 @@
           <label class="check"><input id="rosterReplace" type="checkbox"> Replace the current roster instead of adding</label>
           <h3>Tools</h3>
           <div class="btns">
-            <button id="rosterAutoId">Number students without an ID</button>
             <button id="rosterExport">Download roster CSV</button>
             <button id="rosterClear" class="danger">Clear roster</button>
           </div>
-          <p class="hint">The roster is shared by all exams.</p>
+          <p class="hint">The roster is shared by all exams. After printing personalised sheets, edit students rather than deleting and re-adding them, so their printed code still matches.</p>
         </div>
       </div>
     </section>
@@ -146,16 +153,23 @@
           </div>
           <details class="hint">
             <summary>Key format</summary>
-<pre>1. A          one correct answer
-2) c          case and punctuation don't matter
-3 B 2         worth 2 points (default 1)
-4 A,C         either A or C is accepted
-5 *           free — everyone gets credit
-6 -           dropped — not scored
+<pre>1. A            one correct answer
+2) c            case and punctuation don't matter
+3 B 2           worth 2 points (default 1)
+4 A/C           either A or C is accepted (A,C works too)
+5 ACD           select all that apply: A, C and D must all be marked
+6 A+C 2 partial select all, 2 points, partial credit
+7 BD exact      select all, all or nothing
+8 *             free: everyone gets credit
+9 -             dropped: not scored
 # comments start with a hash
 
-ABCDA DCBAB   or just letters in order;
-[AC] B *      [..] groups, * and - work here too</pre>
+ABCDA DCBAB     or just letters in order;
+[ACD] B [A/C]   [..] groups, * and - work here too</pre>
+            <p>Partial credit for select-all questions is set on the Exam tab
+              (or per question with <code>partial</code> / <code>exact</code>). Enter the key <b>before</b> scanning so
+              extra marks on select-all questions aren't treated as mistakes. If you add it later, use
+              "Re-read this session's sheets".</p>
           </details>
         </div>
         <div class="card">
@@ -173,9 +187,9 @@ ABCDA DCBAB   or just letters in order;
         <div class="card">
           <h2>Generate bubble sheets</h2>
           <fieldset>
-            <label class="check"><input type="radio" name="sheetMode" value="blank" checked> Blank sheets — students write and bubble their own ID</label>
+            <label class="check"><input type="radio" name="sheetMode" value="blank" checked> Blank sheets: students write their name.# and bubble its number and their last-name initial</label>
             <label class="indent">Copies <input id="sheetCopies" type="number" min="1" max="500" value="30"></label>
-            <label class="check"><input type="radio" name="sheetMode" value="roster"> Personalised — one sheet per student, name printed and ID pre-filled</label>
+            <label class="check"><input type="radio" name="sheetMode" value="roster"> Personalised: one sheet per student, with name, name.# and initial pre-filled</label>
             <label class="indent">Section
               <select id="sheetSection"><option value="">All students</option></select>
             </label>
@@ -189,7 +203,7 @@ ABCDA DCBAB   or just letters in order;
           <div class="notes">
             <h3>Printing tips</h3>
             <ul>
-              <li>Print at 100% or "fit to page" — both work; the corner squares handle scaling.</li>
+              <li>Print at 100% or "fit to page". Both work; the corner squares handle scaling.</li>
               <li>Don't change the exam settings after printing. The sheet records its own layout in the small squares along the top edge, so mismatches are detected.</li>
               <li>Single-sided only. Scan in grayscale or colour; 200–300 dpi is ideal.</li>
             </ul>
@@ -216,9 +230,9 @@ ABCDA DCBAB   or just letters in order;
           <label>Mark sensitivity
             <select id="thresholdMode">
               <option value="auto">Automatic (recommended)</option>
-              <option value="0.30">High — catches light pencil</option>
+              <option value="0.30">High: catches light pencil</option>
               <option value="0.45">Medium</option>
-              <option value="0.60">Low — ignores smudges</option>
+              <option value="0.60">Low: ignores smudges</option>
             </select>
           </label>
           <button id="rereadAll" title="Apply the sensitivity to all sheets scanned this session">Re-read this session's sheets</button>
@@ -227,7 +241,7 @@ ABCDA DCBAB   or just letters in order;
         <progress id="scanProgress" max="1" value="0" hidden></progress>
         <div class="table-wrap">
           <table id="scanTable" class="data">
-            <thead><tr><th>Source</th><th>Student ID</th><th>Name</th><th>Score</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Source</th><th>Name.#</th><th>Name</th><th>Score</th><th>Status</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -251,7 +265,7 @@ ABCDA DCBAB   or just letters in order;
         <div class="table-wrap tall">
           <table id="resultsTable" class="data">
             <thead><tr>
-              <th data-sort="id">Student ID</th><th data-sort="name">Name</th><th data-sort="section">Section</th>
+              <th data-sort="id">Name.#</th><th data-sort="name">Name</th><th data-sort="section">Section</th>
               <th data-sort="score">Score</th><th data-sort="percent">%</th><th>Flags</th><th>Source</th><th></th>
             </tr></thead>
             <tbody></tbody>
@@ -280,11 +294,14 @@ ABCDA DCBAB   or just letters in order;
       <div class="review-body">
         <div class="review-canvas-wrap"><canvas id="rvCanvas"></canvas><p id="rvNoImage" class="hint" hidden>The scan image is no longer in memory (it is only kept for the session it was scanned in). You can still edit the answers below.</p></div>
         <div class="review-side">
-          <label>Student ID <input id="rvId" inputmode="numeric"></label>
-          <label>or pick a student <select id="rvStudent"></select></label>
+          <div class="row rv-read">
+            <label>Initial read <input id="rvInit" maxlength="1" autocomplete="off"></label>
+            <label>Name.# number read <input id="rvNum" inputmode="numeric" autocomplete="off"></label>
+          </div>
+          <label>Student <select id="rvStudent"></select></label>
           <p id="rvName" class="rv-name"></p>
           <p id="rvScore" class="rv-score"></p>
-          <p class="hint">Click a bubble on the image — or below — to toggle it. Filled = read as marked (green if right), green ring = key, red ring = wrong, orange dot = check this question.</p>
+          <p class="hint">Click a bubble on the image, or below, to toggle it. Filled = read as marked (green if right), green ring = key, red ring = wrong, orange dot = check this question. A + after the number means select all that apply.</p>
           <div id="rvAnswers" class="rv-answers"></div>
           <ul id="rvFlags" class="rv-flags"></ul>
           <div class="btns">
