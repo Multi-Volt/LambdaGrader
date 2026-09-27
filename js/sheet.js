@@ -169,7 +169,7 @@
     const paper = L.PAPER[exam.paper] ? exam.paper : 'letter';
     const [pw, ph] = L.PAPER[paper];
     const doc = new jsPDF({ unit: 'mm', format: paper, orientation: 'portrait', compress: true });
-    doc.setProperties({ title: `${exam.title || 'Exam'} bubble sheets`, creator: 'OMRChecker Web' });
+    doc.setProperties({ title: `${exam.title || 'Exam'} bubble sheets`, creator: 'LambdaGrader' });
     const layout = L.build(exam);
     const ox = (pw - L.FRAME_W) / 2;
     const oy = (ph - L.FRAME_H) / 2;

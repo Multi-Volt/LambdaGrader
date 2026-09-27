@@ -1,4 +1,4 @@
-# OMRChecker Web
+# LambdaGrader λ
 
 A free bubble-sheet (OMR) grader for multiple-choice exams. It runs **entirely in your browser**
 and is hosted as a static site on GitHub Pages. Rosters, answer keys, scans and scores never leave
@@ -78,13 +78,13 @@ See [`samples/answer-key.txt`](samples/answer-key.txt) and [`samples/roster.csv`
 
 1. Create a new repository on GitHub, then push this folder:
    ```bash
-   git remote add origin https://github.com/<you>/omrchecker-web.git
+   git remote add origin https://github.com/<you>/lambdagrader.git
    git push -u origin main
    ```
 2. In the repository, open **Settings → Pages → Build and deployment → Source** and choose
    **GitHub Actions**. The included workflow (`.github/workflows/pages.yml`) publishes the site on
    every push to `main`.
-3. The site appears at `https://<you>.github.io/omrchecker-web/`.
+3. The site appears at `https://<you>.github.io/lambdagrader/`.
 
 To run it locally, open `index.html`, or serve the folder with `python3 -m http.server`.
 

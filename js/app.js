@@ -97,7 +97,7 @@
     $$('.tabs [role=tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
     $$('.panel').forEach((p) => (p.hidden = p.id !== 'tab-' + name));
     renderTab(name);
-    try { sessionStorage.setItem('omr-tab', name); } catch { /* ignore */ }
+    try { sessionStorage.setItem('lambdagrader-tab', name); } catch { /* ignore */ }
   }
   function currentTab() {
     return $('.tabs [aria-selected=true]').dataset.tab;
@@ -199,7 +199,7 @@
   });
 
   $('#dataExport').addEventListener('click', () => {
-    download(JSON.stringify(data, null, 1), `omrchecker-backup-${today()}.json`, 'application/json');
+    download(JSON.stringify(data, null, 1), `lambdagrader-backup-${today()}.json`, 'application/json');
   });
   $('#dataImport').addEventListener('change', async (e) => {
     const f = e.target.files[0];
@@ -1007,7 +1007,7 @@
   }
   renderExamPicker();
   let first = 'exam';
-  try { first = sessionStorage.getItem('omr-tab') || 'exam'; } catch { /* ignore */ }
+  try { first = sessionStorage.getItem('lambdagrader-tab') || 'exam'; } catch { /* ignore */ }
   showTab($(`.tabs [data-tab="${first}"]`) ? first : 'exam');
 
   // Hooks for automated tests.

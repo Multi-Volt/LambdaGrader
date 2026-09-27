@@ -1,7 +1,8 @@
 /* Persistence: everything lives in this browser's localStorage. */
 (function (g) {
   'use strict';
-  const KEY = 'omrchecker-web:v1';
+  const KEY = 'lambdagrader:v1';
+  const LEGACY_KEYS = ['omrchecker-web:v1'];
   const MAX_STUDENTS = 400;
 
   function uid() {
@@ -21,7 +22,7 @@
   }
 
   function sanitize(d) {
-    if (!d || typeof d !== 'object' || !Array.isArray(d.exams) || !Array.isArray(d.roster)) throw new Error('Not an OMRChecker Web backup.');
+    if (!d || typeof d !== 'object' || !Array.isArray(d.exams) || !Array.isArray(d.roster)) throw new Error('Not a LambdaGrader backup.');
     d.roster = d.roster.filter((s) => s && typeof s.name === 'string').map((s) => ({
       id: String(s.id ?? '').replace(/\D/g, ''), name: s.name, section: String(s.section ?? ''),
     }));
@@ -34,7 +35,8 @@
 
   function load() {
     try {
-      const raw = localStorage.getItem(KEY);
+      let raw = localStorage.getItem(KEY);
+      for (const k of LEGACY_KEYS) if (!raw) raw = localStorage.getItem(k);
       if (raw) return sanitize(JSON.parse(raw));
     } catch (e) {
       console.warn('Could not load saved data', e);
