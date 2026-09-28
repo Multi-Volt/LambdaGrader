@@ -1,5 +1,7 @@
 # LambdaGrader λ
 
+Disclaimer: A large portion of this project was written using AI programming tools. If you do not like that sort of thing feel free to ignore this project, it is not for you!
+
 A free bubble-sheet (OMR) grader for multiple-choice exams. It runs **entirely in your browser**
 and is hosted as a static site on GitHub Pages. Rosters, answer keys, scans and scores never leave
 the computer. There is no server, no account, and no upload.
