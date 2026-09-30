@@ -39,16 +39,25 @@
     }
 
     // LambdaGrader logo on the top edge, clear of the layout code and corner squares.
+    // Same mark as the web page: black disc, faint inner ring, bold serif lambda.
+    const lx = X(138), ly = Y(0);
     doc.setFillColor(0, 0, 0);
-    doc.circle(X(138), Y(0), 2.6, 'F');
+    doc.circle(lx, ly, 3.3, 'F');
+    doc.setLineWidth(0.35);
+    doc.setDrawColor(150);
+    doc.circle(lx, ly, 2.85, 'S');
     doc.setDrawColor(255);
-    doc.setLineWidth(0.5);
-    doc.line(X(136.6), Y(-1.5), X(139.4), Y(1.6));
-    doc.line(X(138.4), Y(-0.1), X(136.4), Y(1.6));
+    doc.setLineCap('round');
+    doc.setLineWidth(0.6);
+    doc.line(lx - 0.9, ly - 1.9, lx + 1.4, ly + 1.9);   // long stroke
+    doc.line(lx + 0.1, ly - 0.2, lx - 1.5, ly + 1.9);   // short leg
+    doc.setLineWidth(0.3);
+    doc.line(lx - 1.5, ly - 1.9, lx - 0.3, ly - 1.9);   // top serif
+    doc.setLineCap('butt');
     doc.setDrawColor(0);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.text('LambdaGrader', X(142), Y(0.1), { baseline: 'middle' });
+    doc.text('LambdaGrader', X(143), Y(0.1), { baseline: 'middle' });
     doc.setFont('helvetica', 'normal');
 
     const leftW = idDigits ? layout.idX0 - 14 : L.FRAME_W;
