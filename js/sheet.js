@@ -40,19 +40,7 @@
 
     // LambdaGrader logo on the bottom edge, clear of the student code strip and corner squares.
     const lx = X(144), ly = Y(L.FRAME_H);
-    doc.setFillColor(0, 0, 0);
-    doc.circle(lx, ly, 3.3, 'F');
-    doc.setLineWidth(0.3);
-    doc.setDrawColor(150);
-    doc.circle(lx, ly, 2.8, 'S');
-    doc.setDrawColor(255);
-    doc.setLineCap('round');
-    doc.setLineWidth(0.55);
-    doc.line(lx - 1.2, ly - 1.9, lx + 1.3, ly + 1.9);   // long stroke
-    doc.setLineWidth(0.45);
-    doc.line(lx + 0.05, ly + 0.05, lx - 1.3, ly + 1.9); // short leg
-    doc.setLineCap('butt');
-    doc.setDrawColor(0);
+    if (g.LOGO_PNG) doc.addImage(g.LOGO_PNG, 'PNG', lx - 3.3, ly - 3.3, 6.6, 6.6);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.text('LambdaGrader', X(149), ly + 0.1, { baseline: 'middle' });
