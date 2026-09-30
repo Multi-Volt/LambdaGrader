@@ -274,7 +274,7 @@
       else if (marked.length > 1) { id += '?'; idProblem = true; }
     }
     let initial = '';
-    if (read.initFills) {
+    if (read.initFills && read.initFills.length) {
       const { marked } = decide(read.initFills, T);
       if (marked.length === 1) initial = L.INITIALS[marked[0]];
       else if (marked.length > 1) { initial = '?'; idProblem = true; }

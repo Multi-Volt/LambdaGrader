@@ -16,7 +16,7 @@
 
   // Layout code: a row of 16 small squares along the top edge that records the
   // sheet's question/choice/ID configuration so scans are self-describing.
-  const CODE_BITS = 16;
+  const CODE_BITS = 17;
   const CODE_X0 = 30;
   const CODE_DX = 6;
   const CODE_SIZE = 3.5;
@@ -79,6 +79,7 @@
   /** Build every printable/readable position for a configuration. */
   function build(cfg) {
     const { numQuestions: nq, numChoices: nc, idDigits: nd } = cfg;
+    const ni = cfg.initials !== false;
     const colsNeeded = Math.ceil(nq / Q_MAX_ROWS);
     const rows = Math.ceil(nq / colsNeeded);
     const minW = columnWidth(nc);
@@ -107,21 +108,22 @@
 
     const code = encodeCode(cfg).map((bit, i) => ({ x: CODE_X0 + i * CODE_DX, y: 0, bit }));
 
-    const initials = [...INITIALS].map((letter, i) => ({
+    const initials = !ni ? [] : [...INITIALS].map((letter, i) => ({
       letter, x: INIT_X0 + (i % 13) * INIT_DX, y: INIT_Y0 + Math.floor(i / 13) * INIT_DY,
     }));
     // Offset by half a step so an upside-down strip never overlaps the layout code.
     const keyStrip = Array.from({ length: KEY_BITS }, (_, i) => ({ x: CODE_X0 + CODE_DX / 2 + i * CODE_DX, y: FRAME_H }));
 
     return {
-      cfg: { numQuestions: nq, numChoices: nc, idDigits: nd },
+      cfg: { numQuestions: nq, numChoices: nc, idDigits: nd, initials: ni },
       questions, id, idX0, code, rows, initials, keyStrip,
       lastRowY: rowY(rows - 1),
     };
   }
 
   function encodeCode(cfg) {
-    const v = (cfg.numQuestions & 255) | (((cfg.numChoices - 2) & 7) << 8) | ((cfg.idDigits & 15) << 11);
+    const v = (cfg.numQuestions & 255) | (((cfg.numChoices - 2) & 7) << 8) | ((cfg.idDigits & 15) << 11) |
+      ((cfg.initials === false ? 0 : 1) << 15);
     const bits = [];
     let ones = 0;
     for (let i = 0; i < CODE_BITS - 1; i++) {
@@ -140,7 +142,7 @@
       if (i < CODE_BITS - 1) v |= bits[i] << i;
     }
     if (ones % 2 !== 0) return null;
-    const cfg = { numQuestions: v & 255, numChoices: ((v >> 8) & 7) + 2, idDigits: (v >> 11) & 15 };
+    const cfg = { numQuestions: v & 255, numChoices: ((v >> 8) & 7) + 2, idDigits: (v >> 11) & 15, initials: ((v >> 15) & 1) === 1 };
     return validateConfig(cfg).length ? null : cfg;
   }
 

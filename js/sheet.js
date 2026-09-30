@@ -38,6 +38,19 @@
       });
     }
 
+    // LambdaGrader logo on the top edge, clear of the layout code and corner squares.
+    doc.setFillColor(0, 0, 0);
+    doc.circle(X(138), Y(0), 2.6, 'F');
+    doc.setDrawColor(255);
+    doc.setLineWidth(0.5);
+    doc.line(X(136.6), Y(-1.5), X(139.4), Y(1.6));
+    doc.line(X(138.4), Y(-0.1), X(136.4), Y(1.6));
+    doc.setDrawColor(0);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('LambdaGrader', X(142), Y(0.1), { baseline: 'middle' });
+    doc.setFont('helvetica', 'normal');
+
     const leftW = idDigits ? layout.idX0 - 14 : L.FRAME_W;
 
     // Title.
@@ -64,14 +77,17 @@
     }
 
     // Last-name initial bubbles.
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.text('FIRST LETTER OF LAST NAME', X(layout.initials[0].x - L.BUBBLE_R), Y(34.6));
-    doc.setFont('helvetica', 'normal');
-    for (const b of layout.initials) bubble(doc, X(b.x), Y(b.y), b.letter, student && student.initial === b.letter);
+    const hasInitials = layout.initials.length > 0;
+    if (hasInitials) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.text('FIRST LETTER OF LAST NAME', X(layout.initials[0].x - L.BUBBLE_R), Y(34.6));
+      doc.setFont('helvetica', 'normal');
+      for (const b of layout.initials) bubble(doc, X(b.x), Y(b.y), b.letter, student && student.initial === b.letter);
+    }
 
-    // Fill example beside the initial block.
-    const exX = layout.initials[12].x + 7;
+    // Fill example beside the initial block (or at the left when there is none).
+    const exX = hasInitials ? layout.initials[12].x + 7 : 0;
     if (leftW - exX > 30) {
       doc.setFontSize(7);
       doc.setTextColor(40);
@@ -87,11 +103,12 @@
     doc.setLineWidth(0.2);
     doc.roundedRect(X(0), Y(47.5), leftW, 19.5, 1.5, 1.5, 'S');
     doc.setFont('helvetica', 'normal');
+    const bubbleHelp = [idDigits && ' Bubble its number at right', hasInitials && ' Bubble the first letter of your last name']
+      .filter(Boolean).join(' and') + (idDigits || hasInitials ? '.' : '');
     const lines = [
       'Fill each bubble completely. Mark one answer per question unless it says "select all that apply".',
-      student ? 'Your name, name.# number and last-name initial are pre-filled. Do not change them.'
-        : (idDigits ? 'Write your name.# above. Bubble its number at right and the first letter of your last name.'
-          : 'Write your name above and bubble the first letter of your last name.'),
+      student ? `Your name${idDigits ? ', name.# number' : ''}${hasInitials ? ' and last-name initial' : ''} ${idDigits || hasInitials ? 'are' : 'is'} pre-filled. Do not change them.`
+        : `Write your name and name.# above.${bubbleHelp}`,
       'Erase changes completely. Do not fold this sheet.',
       'Do not write on or near the black squares.',
     ];

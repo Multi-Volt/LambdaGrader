@@ -167,6 +167,7 @@
     $('#exQuestions').value = ex.numQuestions;
     $('#exChoices').value = ex.numChoices;
     $('#exDigits').value = ex.idDigits;
+    $('#exInitials').checked = ex.initials !== false;
     $('#exMulti').value = ex.multiScoring || 'exact';
     $('#exPaper').value = ex.paper;
     $('#exErrors').textContent = '';
@@ -187,6 +188,7 @@
       numQuestions: parseInt($('#exQuestions').value, 10),
       numChoices: parseInt($('#exChoices').value, 10),
       idDigits: parseInt($('#exDigits').value, 10),
+      initials: $('#exInitials').checked,
     };
     const errs = L.validateConfig(cfg);
     ex.title = $('#exTitle').value.trim() || 'Untitled exam';
@@ -203,12 +205,12 @@
     renderExamPicker();
     renderExam();
   }
-  ['#exTitle', '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exTitle', '#exQuestions', '#exChoices', '#exDigits', '#exInitials', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);
     const cur = exam();
-    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, idDigits: cur.idDigits, paper: cur.paper, multiScoring: cur.multiScoring });
+    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, idDigits: cur.idDigits, initials: cur.initials, paper: cur.paper, multiScoring: cur.multiScoring });
     data.exams.push(e);
     data.activeExamId = e.id;
     save();
@@ -283,8 +285,8 @@
       if (seenId.has(st.id)) dup.add(st.id);
       seenId.set(st.id, st);
       const p = S.idParts(st);
-      if (p.num.length > ex.idDigits) long++;
-      const k = `${p.initial}.${p.num}`;
+      if (ex.idDigits && p.num.length > ex.idDigits) long++;
+      const k = `${ex.initials !== false ? p.initial : ''}.${p.num}`;
       pairs.set(k, [...(pairs.get(k) || []), st]);
     }
     const twins = [...pairs.values()].filter((l) => l.length > 1);
@@ -486,7 +488,7 @@
     if (secs.includes(cur)) sel.value = cur;
     const ex = exam();
     const n = sheetMode() === 'blank' ? Math.max(1, parseInt($('#sheetCopies').value, 10) || 1) : sheetStudents().length;
-    $('#sheetInfo').textContent = `"${ex.title}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits}-digit name.# number · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
+    $('#sheetInfo').textContent = `"${ex.title}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'}${ex.initials === false ? ' · no initial bubbles' : ''} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
     $('#sheetError').textContent = '';
   }
   $$('input[name=sheetMode]').forEach((r) => r.addEventListener('change', renderSheets));
@@ -505,7 +507,7 @@
       const list = sheetStudents();
       if (!list.length) return err('No students in the roster (or section).');
       S.assignKeys(data.roster);
-      const long = list.filter((st) => S.idParts(st).num.length > ex.idDigits);
+      const long = list.filter((st) => ex.idDigits && S.idParts(st).num.length > ex.idDigits);
       if (long.length) return err(`${long.length} name.# number(s) have more than ${ex.idDigits} digits (e.g. ${long[0].id}). Increase "Name.# number digits" on the Exam tab.`);
       save();
       opts.students = list.map((st) => ({ ...st, ...S.idParts(st) }));
@@ -518,7 +520,7 @@
       const blob = await window.Sheet.generate(ex, opts);
       if (sheetUrl) URL.revokeObjectURL(sheetUrl);
       sheetUrl = URL.createObjectURL(blob);
-      const name = `${slug(ex.title)}-${opts.students ? 'personalised' : 'blank'}-sheets.pdf`;
+      const name = `lambdagrader-${slug(ex.title)}-${opts.students ? 'personalised' : 'blank'}-sheets.pdf`;
       const a = $('#sheetDownload');
       a.href = sheetUrl;
       a.download = name;
@@ -594,7 +596,7 @@
     const ex = exam();
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const gray = window.OMR.toGray(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits });
+    const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits, initials: ex.initials !== false });
     const T = thresholdFor(read);
     const it = window.OMR.interpret(read, T, G.multiSelectSet(getKey()));
     const warnings = read.warnings.slice();
