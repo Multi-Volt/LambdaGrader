@@ -245,44 +245,64 @@
       if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(43.3));
     }
 
-    // Fill example.
+    // Instructions box: a bulleted list in regular 12 pt type, then a good/bad bubble example.
+    // If the list would not fit above the divider, the last bullets are dropped.
+    const INSTR_PT = 12, INSTR_LH = 5, EX_H = 7, BOX_TOP = 46.5, BOX_BOTTOM = 76.5, BULLET_X = 4.5, TEXT_X = 8;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(40);
-    const fillLead = 'Fill bubbles like this:';
-    doc.text(fillLead, X(0), Y(50.6));
-    doc.setFillColor(0, 0, 0);
-    const fx = X(0) + doc.getTextWidth(fillLead) + 3.5;
-    doc.circle(fx, Y(49.7), L.BUBBLE_R, 'F');
-    doc.text('Use a dark pencil or black/blue pen.', fx + 5, Y(50.6));
-    doc.setTextColor(0);
-
-    // Instructions at 12 pt in a roomy box above the divider. If they would not fit
-    // between the example and the divider, the last items are dropped.
-    const INSTR_PT = 12, INSTR_LH = 5, BOX_TOP = 54, BOX_BOTTOM = 76.5;
     doc.setFontSize(INSTR_PT);
-    const wrapW = leftW - 8;
+    doc.setTextColor(0);
+    const wrapW = leftW - TEXT_X - 3;
     const items = [
       student ? `Your name${idDigits ? ' and name.# number are' : ' is'} pre-filled. Do not change them.`
         : `Write your name and name.# above.${idDigits ? ' Bubble its number at right.' : ''}`,
+      'Use dark pencil or pen and fill bubbles completely.',
       'One answer per question unless it says "select all that apply".',
-      'Fill bubbles completely and erase changes completely.',
-      'Do not write on or near the black squares.',
+      'Erase changes completely. Do not mark near the black squares.',
     ];
-    const maxLines = Math.floor((BOX_BOTTOM - BOX_TOP - 2.4) / INSTR_LH);
-    const laid = [];
+    const maxLines = Math.floor((BOX_BOTTOM - BOX_TOP - 2.4 - EX_H) / INSTR_LH);
+    const bullets = [];
     let nLines = 0;
     for (const t of items) {
       const ls = doc.splitTextToSize(t, wrapW);
       if (nLines + ls.length > maxLines) break;
-      laid.push(...ls);
+      bullets.push(ls);
       nLines += ls.length;
     }
-    const boxH = nLines * INSTR_LH + 2.4;
+    const boxH = nLines * INSTR_LH + EX_H + 2.4, boxTop = BOX_BOTTOM - boxH;
     doc.setDrawColor(60);
     doc.setLineWidth(0.25);
-    doc.roundedRect(X(0), Y(BOX_BOTTOM - boxH), leftW, boxH, 1.5, 1.5, 'S');
-    laid.forEach((ln, i) => doc.text(ln, X(4), Y(BOX_BOTTOM - boxH + 1.2 + INSTR_LH * 0.8 + i * INSTR_LH)));
+    doc.roundedRect(X(0), Y(boxTop), leftW, boxH, 1.5, 1.5, 'S');
+    let ty = boxTop + 1.2 + INSTR_LH * 0.8;
+    doc.setFillColor(0, 0, 0);
+    for (const ls of bullets) {
+      doc.circle(X(BULLET_X), Y(ty - 1.3), 0.55, 'F');
+      for (const ln of ls) { doc.text(ln, X(TEXT_X), Y(ty)); ty += INSTR_LH; }
+    }
+    // Examples: one good mark, then common bad ones (too small, a check, an X).
+    const ey = boxTop + 1.2 + nLines * INSTR_LH + EX_H / 2 + 0.6, er = 2.2;
+    const textY = ey + 1.4;
+    doc.text('Good:', X(TEXT_X), Y(textY));
+    let cx = TEXT_X + doc.getTextWidth('Good:') + 4;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.35);
+    doc.circle(X(cx), Y(ey), er, 'FD');
+    cx += er + 6;
+    doc.text('Bad:', X(cx), Y(textY));
+    cx += doc.getTextWidth('Bad:') + 4;
+    doc.circle(X(cx), Y(ey), er, 'S');                       // too small
+    doc.circle(X(cx), Y(ey), 0.7, 'F');
+    cx += 2 * er + 3.5;
+    doc.circle(X(cx), Y(ey), er, 'S');                       // check mark
+    doc.setLineWidth(0.45);
+    doc.line(X(cx - 1.5), Y(ey + 0.1), X(cx - 0.4), Y(ey + 1.3));
+    doc.line(X(cx - 0.4), Y(ey + 1.3), X(cx + 1.9), Y(ey - 1.9));
+    doc.setLineWidth(0.35);
+    cx += 2 * er + 3.5;
+    doc.circle(X(cx), Y(ey), er, 'S');                       // X
+    doc.setLineWidth(0.45);
+    doc.line(X(cx - 1.5), Y(ey - 1.5), X(cx + 1.5), Y(ey + 1.5));
+    doc.line(X(cx - 1.5), Y(ey + 1.5), X(cx + 1.5), Y(ey - 1.5));
+    doc.setLineWidth(0.25);
 
     // Student ID grid.
     if (idDigits) {
