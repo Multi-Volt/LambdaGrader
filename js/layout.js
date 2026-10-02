@@ -65,12 +65,19 @@
     return errs;
   }
 
-  function rowY(r) {
-    return Q_TOP + r * Q_PITCH + Math.floor(r / 5) * Q_GROUP_GAP;
+  /**
+   * Optional overrides for sheets laid out differently from the built-in design
+   * (the scanner finds these itself): {qTop, qPitch, groupGap, dx, xShift}.
+   */
+  const DEFAULT_GRID = { qTop: Q_TOP, qPitch: Q_PITCH, groupGap: Q_GROUP_GAP, dx: BUBBLE_DX, xShift: 0 };
+
+  function rowY(r, t) {
+    return t.qTop + r * t.qPitch + Math.floor(r / 5) * t.groupGap;
   }
 
   /** Build every printable/readable position for a configuration. */
-  function build(cfg) {
+  function build(cfg, grid) {
+    const t = Object.assign({}, DEFAULT_GRID, grid);
     const { numQuestions: nq, numChoices: nc, idDigits: nd } = cfg;
     const colsNeeded = Math.ceil(nq / Q_MAX_ROWS);
     const rows = Math.ceil(nq / colsNeeded);
@@ -83,10 +90,10 @@
       const col = Math.floor(q / rows);
       const r = q % rows;
       const colX = startX + col * spacing;
-      const y = rowY(r);
+      const y = rowY(r, t);
       const bubbles = [];
-      for (let i = 0; i < nc; i++) bubbles.push({ x: colX + 9 + i * BUBBLE_DX + BUBBLE_R, y });
-      questions.push({ number: q + 1, labelX: colX + 6.5, y, bubbles });
+      for (let i = 0; i < nc; i++) bubbles.push({ x: colX + t.xShift + 9 + i * t.dx + BUBBLE_R, y });
+      questions.push({ number: q + 1, labelX: colX + t.xShift + 6.5, y, bubbles });
     }
 
     const id = [];
@@ -106,7 +113,7 @@
     return {
       cfg: { numQuestions: nq, numChoices: nc, idDigits: nd },
       questions, id, idX0, code, rows, keyStrip,
-      lastRowY: rowY(rows - 1),
+      lastRowY: rowY(rows - 1, t),
     };
   }
 
@@ -154,7 +161,7 @@
     FRAME_W, FRAME_H, FIDUCIAL, CODE_BITS, CODE_X0, CODE_DX, CODE_SIZE, BUBBLE_R, ID_DX, ID_DY, ID_TOP,
     ID_BOX_TOP, ID_BOX_H, PAPER, LETTERS, MAX_CHOICES, MAX_ID_DIGITS,
     fiducials: [[0, 0], [FRAME_W, 0], [0, FRAME_H], [FRAME_W, FRAME_H]],
-    KEY_BITS, MAX_KEY: 1023,
+    KEY_BITS, MAX_KEY: 1023, DEFAULT_GRID,
     maxQuestions, validateConfig, build, encodeCode, decodeCode, encodeKey, decodeKey,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

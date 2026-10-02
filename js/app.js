@@ -587,7 +587,9 @@
     const ex = exam();
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const gray = window.OMR.toGray(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits });
+    const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits }, session.gridHint);
+    // A custom template only needs to be worked out once; later pages start from it.
+    if (read.grid) session.gridHint = read.grid;
     const T = thresholdFor(read);
     const it = window.OMR.interpret(read, T, G.multiSelectSet(getKey()));
     const warnings = read.warnings.slice();
@@ -865,7 +867,7 @@
 
   function reviewGeometry() {
     const { img } = rv;
-    const layout = L.build(img.read.cfg);
+    const layout = L.build(img.read.cfg, img.read.grid);
     const H = img.read.H;
     const toPx = (x, y) => {
       const [u, v] = window.OMR.apply(H, x, y);

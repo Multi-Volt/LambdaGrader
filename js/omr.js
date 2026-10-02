@@ -99,7 +99,7 @@
     const { w, data } = gray;
     const minSide = w * 0.015, maxSide = w * 0.09;
     const stack = [];
-    let best = null;
+    const cands = [];
     for (let y = ry0; y < ry1; y++) {
       for (let x = rx0; x < rx1; x++) {
         const i0 = y * w + x;
@@ -126,11 +126,12 @@
         const cx = sx / n, cy = sy / n;
         const dist = Math.hypot(cx - cornerX, cy - cornerY);
         // Prefer big squares; break ties toward the page corner.
-        const score = n - dist * 0.01;
-        if (!best || score > best.score) best = { x: cx, y: cy, n, side, gray: sg / n, score };
+        cands.push({ x: cx, y: cy, n, side, gray: sg / n, score: n - dist * 0.01 });
       }
     }
-    return best;
+    // Keep a few; findFiducials picks the set that forms a consistent rectangle,
+    // so a big dark blob (a smudge, a button) cannot beat the real square.
+    return cands.sort((a, b) => b.score - a.score).slice(0, 6);
   }
 
   function findFiducials(gray) {
@@ -138,22 +139,29 @@
     const bin = adaptiveBinary(gray);
     const labels = new Uint8Array(w * h);
     const rw = Math.round(w * 0.36), rh = Math.round(h * 0.3);
-    const found = [
+    const cands = [
       findSquareIn(gray, bin, labels, 0, 0, rw, rh, 0, 0),
       findSquareIn(gray, bin, labels, w - rw, 0, w, rh, w, 0),
       findSquareIn(gray, bin, labels, 0, h - rh, rw, h, 0, h),
       findSquareIn(gray, bin, labels, w - rw, h - rh, w, h, w, h),
     ];
-    if (found.some((f) => !f)) return null;
-    const [tl, tr, bl, br] = found;
-    const top = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-    const bottom = Math.hypot(br.x - bl.x, br.y - bl.y);
-    const left = Math.hypot(bl.x - tl.x, bl.y - tl.y);
-    const right = Math.hypot(br.x - tr.x, br.y - tr.y);
-    const ratio = (left + right) / (top + bottom);
+    if (cands.some((c) => !c.length)) return null;
     const expected = L.FRAME_H / L.FRAME_W;
-    if (ratio < expected * 0.8 || ratio > expected * 1.25) return null;
-    if (Math.min(top, bottom) / Math.max(top, bottom) < 0.75) return null;
+    let found = null, bestCost = Infinity;
+    for (const tl of cands[0]) for (const tr of cands[1]) for (const bl of cands[2]) for (const br of cands[3]) {
+      const top = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+      const bottom = Math.hypot(br.x - bl.x, br.y - bl.y);
+      const left = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+      const right = Math.hypot(br.x - tr.x, br.y - tr.y);
+      const ratio = (left + right) / (top + bottom);
+      if (ratio < expected * 0.8 || ratio > expected * 1.25) continue;
+      if (Math.min(top, bottom) / Math.max(top, bottom) < 0.75) continue;
+      const sides = [tl, tr, bl, br].map((c) => Math.sqrt(c.n));
+      const sizeSpread = Math.max(...sides) / Math.min(...sides) - 1;
+      const skew = Math.hypot(tl.x + br.x - tr.x - bl.x, tl.y + br.y - tr.y - bl.y) / (top + bottom);
+      const cost = sizeSpread + skew + Math.abs(ratio / expected - 1);
+      if (cost < bestCost) { bestCost = cost; found = [tl, tr, bl, br]; }
+    }
     return found;
   }
 
@@ -276,12 +284,116 @@
     return { answers, flags, studentId: id, idProblem };
   }
 
+
+  // ---------- bubble grid alignment ----------
+  // Sheets from the built-in generator match Layout exactly. Sheets from another
+  // template (same corner squares and code row, different bubble positions) are
+  // handled by finding the grid from the printed bubble outlines themselves.
+
+  const RING_PTS = [], OUT_PTS = [];
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    RING_PTS.push([c * L.BUBBLE_R, s * L.BUBBLE_R]);
+    OUT_PTS.push([c * (L.BUBBLE_R + 0.8), s * (L.BUBBLE_R + 0.8)]);
+  }
+  const GRID_ACCEPT = 0.3;   // mean outline contrast (0..1) that counts as "grid is aligned"
+
+  /** Dark outline at the bubble radius with paper just outside it: 0..1. Filled or empty bubbles both score. */
+  function ringContrast(img, H, cx, cy, span) {
+    let ring = 0, out = 0;
+    for (let k = 0; k < 16; k++) {
+      const [u, v] = apply(H, cx + RING_PTS[k][0], cy + RING_PTS[k][1]);
+      ring += sampleGray(img, u, v);
+      const [u2, v2] = apply(H, cx + OUT_PTS[k][0], cy + OUT_PTS[k][1]);
+      out += sampleGray(img, u2, v2);
+    }
+    return Math.max(0, Math.min(1, (out - ring) / 16 / span));
+  }
+
+  function gridScore(img, H, layout, span, maxRows) {
+    const qs = layout.questions;
+    const step = Math.max(1, Math.ceil(qs.length / maxRows));
+    let sum = 0, n = 0;
+    for (let i = 0; i < qs.length; i += step) {
+      for (const b of qs[i].bubbles) { sum += ringContrast(img, H, b.x, b.y, span); n++; }
+    }
+    return n ? sum / n : 0;
+  }
+
+  /** Find {qTop,qPitch,groupGap,dx,xShift} that put the layout's bubbles on the printed outlines. */
+  function findGrid(img, H, cfg, white, black) {
+    const span = Math.max(40, white - black) * 0.5;
+    const base = L.build(cfg);
+    const xs = [...new Set(base.questions.flatMap((q) => q.bubbles.map((b) => Math.round(b.x * 4) / 4)))].sort((a, b) => a - b);
+    const slots = xs.length > 12 ? xs.filter((_, i) => i % Math.ceil(xs.length / 12) === 0) : xs;
+    // 1. Vertical profile: outline evidence at each height, allowing some sideways slack.
+    const y0 = 20, ys = 0.25, ny = Math.floor((L.FRAME_H - 8 - y0) / ys);
+    const prof = new Float32Array(ny);
+    for (let j = 0; j < ny; j++) {
+      let t = 0;
+      for (const x of slots) {
+        let m = 0;
+        for (let ox = -2.5; ox <= 2.5; ox += 0.5) m = Math.max(m, ringContrast(img, H, x + ox, y0 + j * ys, span));
+        t += m;
+      }
+      prof[j] = t / slots.length;
+    }
+    const at = (y) => { const j = Math.round((y - y0) / ys); return j >= 0 && j < ny ? prof[j] : 0; };
+    const rows = base.rows;
+    let best = null;
+    for (let top = 30; top <= 170; top += 0.5) {
+      for (let pitch = 4; pitch <= 7; pitch += 0.1) {
+        for (let gap = 0; gap <= 4; gap += 0.25) {
+          let t = 0;
+          for (let r = 0; r < rows; r++) t += at(top + r * pitch + Math.floor(r / 5) * gap);
+          t /= rows;
+          if (!best || t > best.t) best = { t, qTop: top, qPitch: pitch, groupGap: gap };
+        }
+      }
+    }
+    if (!best || best.t < 0.1) return null;
+    let g = { qTop: best.qTop, qPitch: best.qPitch, groupGap: best.groupGap, dx: L.DEFAULT_GRID.dx, xShift: 0 };
+    // 2. Sideways: shift and bubble spacing against the rows found.
+    let bs = -1;
+    for (let sh = -8; sh <= 8; sh += 0.25) {
+      for (let dx = 4.4; dx <= 5.8; dx += 0.1) {
+        const sc = gridScore(img, H, L.build(cfg, Object.assign({}, g, { xShift: sh, dx })), span, 6);
+        if (sc > bs) { bs = sc; g.xShift = sh; g.dx = dx; }
+      }
+    }
+    // 3. Fine tune the rows with real samples.
+    const c0 = Object.assign({}, g);
+    bs = -1;
+    for (let a = -0.6; a <= 0.6; a += 0.2) for (let b = -0.1; b <= 0.1; b += 0.05) for (let c = -0.3; c <= 0.3; c += 0.1) {
+      const t = Object.assign({}, c0, { qTop: c0.qTop + a, qPitch: c0.qPitch + b, groupGap: Math.max(0, c0.groupGap + c) });
+      const sc = gridScore(img, H, L.build(cfg, t), span, 40);
+      if (sc > bs) { bs = sc; g = t; }
+    }
+    return { grid: g, score: bs };
+  }
+
+  /** Pick the bubble grid: built-in layout, a previously learned one (hint), or search. */
+  function chooseGrid(img, H, cfg, white, black, hint) {
+    const span = Math.max(40, white - black) * 0.5;
+    const tries = [{ grid: null, custom: false }];
+    if (hint) tries.push({ grid: hint, custom: true });
+    let bestTry = null;
+    for (const t of tries) {
+      t.score = gridScore(img, H, L.build(cfg, t.grid), span, 40);
+      if (t.score >= GRID_ACCEPT) return t;
+      if (!bestTry || t.score > bestTry.score) bestTry = t;
+    }
+    const f = findGrid(img, H, cfg, white, black);
+    if (f && f.score >= GRID_ACCEPT && f.score > bestTry.score + 0.1) return { grid: f.grid, custom: true, score: f.score };
+    return Object.assign(bestTry, { poor: true });
+  }
+
   /**
    * Read a sheet image.
    * @param gray   {w,h,data} grayscale image
    * @param fallbackCfg  exam configuration to use if the layout code cannot be read
    */
-  function readSheet(gray, fallbackCfg) {
+  function readSheet(gray, fallbackCfg, gridHint) {
     const attempt = (img, rotated) => {
       const fid = findFiducials(img);
       if (!fid) return null;
@@ -289,18 +401,22 @@
       if (!H) return null;
       const white = whiteLevel(img, fid);
       const black = fid.reduce((s, f) => s + f.gray, 0) / 4;
-      const bits = [];
+      const bits = [], below = [];
       for (let i = 0; i < L.CODE_BITS; i++) {
         const x = L.CODE_X0 + i * L.CODE_DX;
         bits.push(darkness(img, H, CODE_PTS, x, 0, white, black) > 0.5 ? 1 : 0);
+        below.push(darkness(img, H, CODE_PTS, x, L.FRAME_H, white, black) > 0.5 ? 1 : 0);
       }
-      return { img, rotated, fid, H, white, black, cfg: L.decodeCode(bits) };
+      // Code squares along the top edge and nothing at the same spots on the bottom
+      // edge means upright. A decode that merely passes parity is not proof of that.
+      const upright = bits.reduce((a, b) => a + b, 0) - below.reduce((a, b) => a + b, 0);
+      return { img, rotated, fid, H, white, black, upright, cfg: L.decodeCode(bits) };
     };
 
     let r = attempt(gray, false);
-    if (!r || !r.cfg) {
+    if (!r || r.upright <= 0 || !r.cfg) {
       const r2 = attempt(rotate180(gray), true);
-      if (r2 && r2.cfg) r = r2;
+      if (r2 && (!r || r2.upright > r.upright || (r2.upright === r.upright && !r.cfg && r2.cfg))) r = r2;
     }
     if (!r) throw new Error('Could not find the four black corner squares. Make sure the whole sheet is visible and upright.');
     const warnings = [];
@@ -310,8 +426,10 @@
       cfg = fallbackCfg;
       warnings.push('Layout code unreadable; used the exam settings instead.');
     }
-    const layout = L.build(cfg);
     const { img, H, white, black } = r;
+    const gridPick = chooseGrid(img, H, cfg, white, black, gridHint);
+    if (gridPick.poor) warnings.push('Could not line up the answer bubbles with this sheet; answers may be wrong.');
+    const layout = L.build(cfg, gridPick.grid);
     const qFills = layout.questions.map((q) => q.bubbles.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black)));
     const idFills = layout.id.map((c) => c.bubbles.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black)));
     // Subtract the blank level (printed letter/digit + paper tone) measured on this page.
@@ -333,6 +451,7 @@
     const autoT = Math.max(0.3, Math.min(0.6, otsu(all)));
     return {
       cfg, H, rotated: r.rotated, warnings, autoThreshold: autoT,
+      grid: gridPick.custom ? gridPick.grid : null, gridScore: gridPick.score,
       qFills: qFills.map((a) => a.map((v) => Math.round(v * 1000) / 1000)),
       idFills: idFills.map((a) => a.map((v) => Math.round(v * 1000) / 1000)),
       key: key || 0,
