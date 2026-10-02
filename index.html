@@ -38,22 +38,25 @@
       <div class="grid2">
         <div class="card">
           <h2>Exam settings</h2>
+          <label>Exam name (for your own use, never printed)
+            <input id="exName" type="text" maxlength="120">
+          </label>
           <label>Title (printed on the sheet)
-            <span class="colored"><input id="exTitle" type="text" maxlength="120"><input id="exTitleColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
+            <span class="colored"><input id="exTitle" type="text" maxlength="120"><input id="exTitleColor" type="color" value="#000000" title="Text color" aria-label="Text color"><input id="exTitleSize" class="size" type="number" min="6" max="40" step="0.5" placeholder="20" title="Font size (pt)" aria-label="Font size in points"></span>
           </label>
           <label>Subtitle (optional, under the title)
-            <span class="colored"><input id="exSubtitle" type="text" maxlength="160" placeholder="e.g. Use this sheet to answer ONLY the multiple-choice questions."><input id="exSubtitleColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
+            <span class="colored"><input id="exSubtitle" type="text" maxlength="160" placeholder="e.g. Use this sheet to answer ONLY the multiple-choice questions."><input id="exSubtitleColor" type="color" value="#000000" title="Text color" aria-label="Text color"><input id="exSubtitleSize" class="size" type="number" min="6" max="40" step="0.5" placeholder="11" title="Font size (pt)" aria-label="Font size in points"></span>
           </label>
-          <p class="hint">Each text can have a color. To color just part of a text, write <code>{red|word}</code> or <code>{#1a56db|word}</code> (red, orange, green, blue, purple, gray, or a hex code).</p>
+          <p class="hint">Each text has a color and a font size in points (blank = default; long text wraps or shrinks to fit). To color just part of a text, write <code>{red|word}</code> or <code>{#1a56db|word}</code> (red, orange, green, blue, purple, gray, or a hex code).</p>
           <div class="row">
             <label>Class name (optional, top left)
-              <span class="colored"><input id="exClass" type="text" maxlength="24" placeholder="e.g. ECE 2300"><input id="exClassColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
+              <span class="colored"><input id="exClass" type="text" maxlength="24" placeholder="e.g. ECE 2300"><input id="exClassColor" type="color" value="#000000" title="Text color" aria-label="Text color"><input id="exClassSize" class="size" type="number" min="6" max="40" step="0.5" placeholder="10" title="Font size (pt)" aria-label="Font size in points"></span>
             </label>
             <label>Header text (optional, top right)
-              <span class="colored"><input id="exHeaderRight" type="text" maxlength="48" placeholder="e.g. Midterm Exam 1"><input id="exHeaderRightColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
+              <span class="colored"><input id="exHeaderRight" type="text" maxlength="48" placeholder="e.g. Midterm Exam 1"><input id="exHeaderRightColor" type="color" value="#000000" title="Text color" aria-label="Text color"><input id="exHeaderRightSize" class="size" type="number" min="6" max="40" step="0.5" placeholder="10" title="Font size (pt)" aria-label="Font size in points"></span>
             </label>
             <label>Page number (optional, bottom right)
-              <span class="colored"><input id="exPageNum" type="text" maxlength="8" placeholder="e.g. 3"><input id="exPageNumColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
+              <span class="colored"><input id="exPageNum" type="text" maxlength="8" placeholder="e.g. 3"><input id="exPageNumColor" type="color" value="#000000" title="Text color" aria-label="Text color"><input id="exPageNumSize" class="size" type="number" min="6" max="40" step="0.5" placeholder="10" title="Font size (pt)" aria-label="Font size in points"></span>
             </label>
           </div>
           <div class="row">

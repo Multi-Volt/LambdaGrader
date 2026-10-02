@@ -11,8 +11,8 @@
 
   function newExam(title) {
     return {
-      id: uid(), title: title || 'Exam 1', numQuestions: 50, numChoices: 5, idDigits: 4,
-      paper: 'letter', subtitle: '', className: '', headerRight: '', pageNum: '', showLogo: true, colors: {}, keyText: '', multiScoring: 'exact', results: [], created: new Date().toISOString(),
+      id: uid(), name: title || 'Exam 1', title: title || 'Exam 1', numQuestions: 50, numChoices: 5, idDigits: 4,
+      paper: 'letter', subtitle: '', className: '', headerRight: '', pageNum: '', showLogo: true, colors: {}, sizes: {}, keyText: '', multiScoring: 'exact', results: [], created: new Date().toISOString(),
     };
   }
 
@@ -64,7 +64,12 @@
     d.roster = assignKeys(d.roster.filter((s) => s && typeof s.name === 'string').map((s) => ({
       key: s.key, id: normalizeId(s.id), name: s.name, section: String(s.section ?? ''),
     })));
-    d.exams = d.exams.filter((e) => e && e.id).map((e) => ({ ...newExam(), ...e, results: Array.isArray(e.results) ? e.results : [] }));
+    d.exams = d.exams.filter((e) => e && e.id).map((e) => ({
+      ...newExam(), ...e,
+      // Exams saved before the internal name existed take it from their printed title.
+      name: e.name || String(e.title || 'Exam').replace(/\{[^{}|]+\|([^{}]*)\}/g, '$1'),
+      results: Array.isArray(e.results) ? e.results : [],
+    }));
     for (const e of d.exams) {
       for (const r of e.results) {
         // Results saved before name.# support stored the bubbled digits as studentId.

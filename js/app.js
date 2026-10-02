@@ -13,6 +13,7 @@
   const fmtPts = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, ''));
   const today = () => new Date().toISOString().slice(0, 10);
   const plainText = (s) => (window.Sheet ? window.Sheet.plain(s) : String(s || ''));
+  const examName = (e) => e.name || plainText(e.title) || 'Untitled';
   const slug = (s) => plainText(s || 'exam').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exam';
 
   let toastTimer;
@@ -142,7 +143,7 @@
   // ---------- exam ----------
   function renderExamPicker() {
     const sel = $('#examSelect');
-    sel.innerHTML = data.exams.map((e) => `<option value="${e.id}">${esc(plainText(e.title) || 'Untitled')}</option>`).join('');
+    sel.innerHTML = data.exams.map((e) => `<option value="${e.id}">${esc(examName(e))}</option>`).join('');
     sel.value = data.activeExamId;
   }
   $('#examSelect').addEventListener('change', (e) => {
@@ -156,9 +157,11 @@
   for (let c = 2; c <= L.MAX_CHOICES; c++) choiceSel.add(new Option(`${c} (A–${L.LETTERS[c - 1]})`, c));
 
   const TEXT_COLOR_FIELDS = [['title', '#exTitleColor'], ['subtitle', '#exSubtitleColor'], ['className', '#exClassColor'], ['headerRight', '#exHeaderRightColor'], ['pageNum', '#exPageNumColor']];
+  const TEXT_SIZE_FIELDS = [['title', '#exTitleSize'], ['subtitle', '#exSubtitleSize'], ['className', '#exClassSize'], ['headerRight', '#exHeaderRightSize'], ['pageNum', '#exPageNumSize']];
 
   function renderExam() {
     const ex = exam();
+    $('#exName').value = ex.name || '';
     $('#exTitle').value = ex.title;
     $('#exSubtitle').value = ex.subtitle || '';
     $('#exClass').value = ex.className || '';
@@ -166,6 +169,7 @@
     $('#exPageNum').value = ex.pageNum || '';
     $('#exLogo').checked = ex.showLogo !== false;
     for (const [k, sel] of TEXT_COLOR_FIELDS) $(sel).value = (ex.colors && ex.colors[k]) || '#000000';
+    for (const [k, sel] of TEXT_SIZE_FIELDS) $(sel).value = (ex.sizes && ex.sizes[k]) || '';
     $('#exQuestions').value = ex.numQuestions;
     $('#exChoices').value = ex.numChoices;
     $('#exDigits').value = ex.idDigits;
@@ -191,7 +195,8 @@
       idDigits: parseInt($('#exDigits').value, 10),
     };
     const errs = L.validateConfig(cfg);
-    ex.title = $('#exTitle').value.trim() || 'Untitled exam';
+    ex.name = $('#exName').value.trim() || 'Untitled exam';
+    ex.title = $('#exTitle').value.trim();
     ex.subtitle = $('#exSubtitle').value.trim();
     ex.className = $('#exClass').value.trim();
     ex.headerRight = $('#exHeaderRight').value.trim();
@@ -199,6 +204,11 @@
     ex.showLogo = $('#exLogo').checked;
     ex.colors = {};
     for (const [k, sel] of TEXT_COLOR_FIELDS) if ($(sel).value !== '#000000') ex.colors[k] = $(sel).value;
+    ex.sizes = {};
+    for (const [k, sel] of TEXT_SIZE_FIELDS) {
+      const v = parseFloat($(sel).value);
+      if (v > 0) ex.sizes[k] = Math.max(6, Math.min(40, v));
+    }
     ex.paper = $('#exPaper').value;
     ex.multiScoring = $('#exMulti').value;
     if (errs.length) {
@@ -212,7 +222,7 @@
     renderExamPicker();
     renderExam();
   }
-  ['#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exName', '#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), ...TEXT_SIZE_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);
@@ -223,12 +233,12 @@
     save();
     renderExamPicker();
     renderExam();
-    $('#exTitle').focus();
-    $('#exTitle').select();
+    $('#exName').focus();
+    $('#exName').select();
   });
   $('#exDuplicate').addEventListener('click', () => {
     const cur = exam();
-    const e = { ...JSON.parse(JSON.stringify(cur)), id: S.uid(), title: cur.title + ' (copy)', results: [], created: new Date().toISOString() };
+    const e = { ...JSON.parse(JSON.stringify(cur)), id: S.uid(), name: examName(cur) + ' (copy)', results: [], created: new Date().toISOString() };
     data.exams.push(e);
     data.activeExamId = e.id;
     save();
@@ -239,7 +249,7 @@
   $('#exDelete').addEventListener('click', () => {
     const cur = exam();
     if (data.exams.length < 2) return;
-    if (!confirm(`Delete "${cur.title}" and its ${cur.results.length} result(s)? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${examName(cur)}" and its ${cur.results.length} result(s)? This cannot be undone.`)) return;
     data.exams = data.exams.filter((e) => e !== cur);
     data.activeExamId = data.exams[0].id;
     save();
@@ -474,7 +484,7 @@
     $('#keyText').value = exam().keyText;
     renderKey();
   });
-  $('#keyDownload').addEventListener('click', () => download(exam().keyText || '', `${slug(exam().title)}-key.txt`));
+  $('#keyDownload').addEventListener('click', () => download(exam().keyText || '', `${slug(examName(exam()))}-key.txt`));
 
   // ---------- sheets ----------
   let sheetUrl = null;
@@ -495,7 +505,7 @@
     if (secs.includes(cur)) sel.value = cur;
     const ex = exam();
     const n = sheetMode() === 'blank' ? Math.max(1, parseInt($('#sheetCopies').value, 10) || 1) : sheetStudents().length;
-    $('#sheetInfo').textContent = `"${plainText(ex.title)}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
+    $('#sheetInfo').textContent = `"${examName(ex)}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
     $('#sheetError').textContent = '';
   }
   $$('input[name=sheetMode]').forEach((r) => r.addEventListener('change', renderSheets));
@@ -527,7 +537,7 @@
       const blob = await window.Sheet.generate(ex, opts);
       if (sheetUrl) URL.revokeObjectURL(sheetUrl);
       sheetUrl = URL.createObjectURL(blob);
-      const name = `lambdagrader-${slug(ex.title)}-${opts.students ? 'personalised' : 'blank'}-sheets.pdf`;
+      const name = `lambdagrader-${slug(examName(ex))}-${opts.students ? 'personalised' : 'blank'}-sheets.pdf`;
       const a = $('#sheetDownload');
       a.href = sheetUrl;
       a.download = name;
@@ -828,7 +838,7 @@
     const body = rows.map((a) => [a.sid, a.student ? a.student.name : '', a.student ? a.student.section : '',
       fmtPts(a.sc.score), fmtPts(a.sc.possible), pct(a.sc.percent), a.sc.correct, a.issues.join('; '), a.r.source, a.r.scannedAt, ...a.r.answers]);
     body.sort((x, y) => String(x[1]).localeCompare(String(y[1])) || String(x[0]).localeCompare(String(y[0])));
-    download(G.toCSV([head, ...body]), `${slug(ex.title)}-results-${today()}.csv`, 'text/csv');
+    download(G.toCSV([head, ...body]), `${slug(examName(ex))}-results-${today()}.csv`, 'text/csv');
   });
   $('#csvGradebook').addEventListener('click', () => {
     const ex = exam();
@@ -843,18 +853,18 @@
       return [s.id, s.name, s.section, fmtPts(a.sc.score), fmtPts(a.sc.possible), pct(a.sc.percent), list.length > 1 ? 'duplicate scans, latest used' : (a.issues.length ? 'check' : 'graded')];
     });
     for (const a of rows) if (!a.student) body.push([a.sid, '', '', fmtPts(a.sc.score), fmtPts(a.sc.possible), pct(a.sc.percent), `unmatched sheet (${a.r.source})`]);
-    download(G.toCSV([head, ...body]), `${slug(ex.title)}-gradebook-${today()}.csv`, 'text/csv');
+    download(G.toCSV([head, ...body]), `${slug(examName(ex))}-gradebook-${today()}.csv`, 'text/csv');
   });
   $('#csvItems').addEventListener('click', () => {
     const ex = exam();
     const letters = L.LETTERS.slice(0, ex.numChoices).split('');
     const items = itemAnalysis(annotateResults());
     download(G.toCSV([['Question', 'Key', 'Percent correct', ...letters, 'Blank', 'Multiple'],
-      ...items.map((i) => [i.q, i.key, i.pct == null ? '' : pct(i.pct), ...i.counts, i.blank, i.multi])]), `${slug(ex.title)}-items-${today()}.csv`, 'text/csv');
+      ...items.map((i) => [i.q, i.key, i.pct == null ? '' : pct(i.pct), ...i.counts, i.blank, i.multi])]), `${slug(examName(ex))}-items-${today()}.csv`, 'text/csv');
   });
   $('#resultsClear').addEventListener('click', () => {
     const ex = exam();
-    if (!ex.results.length || !confirm(`Delete all ${ex.results.length} result(s) for "${ex.title}"?`)) return;
+    if (!ex.results.length || !confirm(`Delete all ${ex.results.length} result(s) for "${examName(ex)}"?`)) return;
     ex.results = [];
     session.log = [];
     save();

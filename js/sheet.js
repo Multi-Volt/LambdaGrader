@@ -70,9 +70,81 @@
     doc.setTextColor(0);
   }
 
+  /** Break rich text into word tokens [{t, rgb}] (spaces kept as their own tokens). */
+  function richTokens(text) {
+    const out = [];
+    for (const sg of parseRich(text)) for (const t of sg.t.split(/(\s+)/)) if (t) out.push({ t, rgb: sg.rgb });
+    return out;
+  }
+
+  /**
+   * Wrap rich text into at most maxLines lines no wider than maxWidth, using the
+   * largest size from `size` down to `minSize` that fits. The font must be set.
+   * @returns {{lines: {t,rgb}[][], size: number}}
+   */
+  function layoutRich(doc, text, size, minSize, maxWidth, maxLines) {
+    const toks = richTokens(text);
+    const wrap = () => {
+      const lines = [[]];
+      let w = 0, tooWide = false;
+      for (const tk of toks) {
+        const tw = doc.getTextWidth(tk.t), isSpace = /^\s+$/.test(tk.t);
+        const line = lines[lines.length - 1];
+        if (isSpace && !line.length) continue;
+        if (!isSpace && tw > maxWidth) tooWide = true;
+        if (!isSpace && line.length && w + tw > maxWidth) {
+          while (line.length && /^\s+$/.test(line[line.length - 1].t)) line.pop();
+          lines.push([tk]); w = tw;
+        } else { line.push(tk); w += tw; }
+      }
+      const last = lines[lines.length - 1];
+      while (last.length && /^\s+$/.test(last[last.length - 1].t)) last.pop();
+      return { lines, tooWide };
+    };
+    let sz = size, r;
+    for (;;) {
+      doc.setFontSize(sz);
+      r = wrap();
+      if (!r.tooWide && r.lines.length <= maxLines) return { lines: r.lines, size: sz };
+      if (sz <= minSize) break;
+      sz = Math.max(minSize, sz - 0.5);
+    }
+    // Still too big at the minimum size: keep the first lines, shorten the last with an ellipsis.
+    const lines = r.lines.slice(0, maxLines);
+    const lastLine = lines[lines.length - 1];
+    const width = () => lastLine.reduce((a, tk) => a + doc.getTextWidth(tk.t), 0);
+    while (lastLine.length && (width() > maxWidth || r.lines.length > maxLines)) {
+      const tk = lastLine[lastLine.length - 1];
+      tk.t = tk.t.replace(/…$/, '').slice(0, -1);
+      if (!tk.t) lastLine.pop(); else tk.t += '…';
+      if (width() <= maxWidth) break;
+    }
+    return { lines, size: sz };
+  }
+
+  function drawTokens(doc, tokens, x, y, align, baseColor) {
+    // Draw each same-colored run as one string so spacing and kerning stay natural.
+    const runs = [];
+    for (const tk of tokens) {
+      const last = runs[runs.length - 1];
+      if (last && last.rgb === tk.rgb) last.t += tk.t; else runs.push({ t: tk.t, rgb: tk.rgb });
+    }
+    const width = runs.reduce((a, r) => a + doc.getTextWidth(r.t), 0);
+    let cx = align === 'center' ? x - width / 2 : align === 'right' ? x - width : x;
+    for (const r of runs) {
+      const c = r.rgb || baseColor || [0, 0, 0];
+      doc.setTextColor(c[0], c[1], c[2]);
+      doc.text(r.t, cx, y);
+      cx += doc.getTextWidth(r.t);
+    }
+    doc.setTextColor(0);
+  }
+
   function drawPage(doc, layout, ox, oy, opts) {
-    const { title, subtitle, className, headerRight, pageNum, showLogo, colors, student, pageLabel } = opts;
+    const { title, subtitle, className, headerRight, pageNum, showLogo, colors, sizes, student, pageLabel } = opts;
     const col = (k) => parseColor(colors && colors[k]) || [0, 0, 0];
+    const DEFAULT_SIZES = { title: 20, subtitle: 11, className: 10, headerRight: 10, pageNum: 10 };
+    const sz = (k) => Math.max(6, Math.min(40, Number(sizes && sizes[k]) || DEFAULT_SIZES[k]));
     const { numQuestions, numChoices, idDigits } = layout.cfg;
     const X = (x) => ox + x;
     const Y = (y) => oy + y;
@@ -109,29 +181,49 @@
     // Optional header text on the code-row line: class name between the top-left
     // square and the layout code, free text between the code and the top-right square.
     doc.setFont('helvetica', 'bold');
-    if (className) drawRich(doc, className, X(half + 2), Y(0), { size: 10, minSize: 6, maxWidth: 22, baseline: 'middle', color: col('className') });
-    if (headerRight) drawRich(doc, headerRight, X(L.FRAME_W - half - 2), Y(0), { size: 10, minSize: 6, maxWidth: 42, align: 'right', baseline: 'middle', color: col('headerRight') });
+    if (className) drawRich(doc, className, X(half + 2), Y(0), { size: sz('className'), minSize: 6, maxWidth: 22, baseline: 'middle', color: col('className') });
+    if (headerRight) drawRich(doc, headerRight, X(L.FRAME_W - half - 2), Y(0), { size: sz('headerRight'), minSize: 6, maxWidth: 42, align: 'right', baseline: 'middle', color: col('headerRight') });
     doc.setFont('helvetica', 'normal');
 
     // Optional page number above the bottom-right corner square.
     if (pageNum) {
-      drawRich(doc, String(pageNum), X(L.FRAME_W + half), Y(L.FRAME_H - half - 3), { size: 10, minSize: 10, maxWidth: 30, align: 'right', baseline: 'middle', color: col('pageNum') });
+      drawRich(doc, String(pageNum), X(L.FRAME_W + half), Y(L.FRAME_H - half - 3), { size: sz('pageNum'), minSize: 6, maxWidth: 30, align: 'right', baseline: 'middle', color: col('pageNum') });
     }
 
     const leftW = idDigits ? layout.idX0 - 14 : L.FRAME_W;
 
     // Title and subtitle, centered on the page (or on the area left of the ID box when that is too narrow).
-    let midX = L.FRAME_W / 2, titleW = L.FRAME_W;
+    // They wrap to two lines if needed and the pair is scaled down to stay clear of the Name line.
+    let midX = L.FRAME_W / 2, textW = L.FRAME_W - 16;
     if (idDigits) {
-      titleW = 2 * (leftW - midX);
-      if (titleW < leftW * 0.7) { midX = leftW / 2; titleW = leftW; }
+      textW = 2 * (leftW - midX);
+      if (textW < leftW * 0.7) { midX = leftW / 2; textW = leftW; }
+    }
+    const MM = 0.3528, TOP = 4.5, LIMIT = 22.5;
+    const titleText = title || 'Multiple Choice Exam';
+    let blk;
+    for (let f = 1; ; f -= 0.05) {
+      doc.setFont('helvetica', 'bold');
+      const tl = layoutRich(doc, titleText, sz('title') * f, 6, textW, 2);
+      let sl = null;
+      if (subtitle) {
+        doc.setFont('helvetica', 'normal');
+        sl = layoutRich(doc, subtitle, sz('subtitle') * f, 6, textW, 2);
+      }
+      const tMm = tl.size * MM, sMm = sl ? sl.size * MM : 0;
+      const t0 = TOP + 0.74 * tMm, tEnd = t0 + (tl.lines.length - 1) * 1.15 * tMm;
+      const s0 = tEnd + 0.3 * tMm + 1.8 + 0.74 * sMm;
+      const end = sl ? s0 + (sl.lines.length - 1) * 1.15 * sMm + 0.25 * sMm : tEnd + 0.25 * tMm;
+      blk = { tl, sl, t0, s0, tMm, sMm };
+      if (end <= LIMIT || f <= 0.4) break;
     }
     doc.setFont('helvetica', 'bold');
-    drawRich(doc, title || 'Multiple Choice Exam', X(midX), Y(11), { size: 15, minSize: 9, maxWidth: titleW, align: 'center', color: col('title') });
-
-    if (subtitle) {
+    doc.setFontSize(blk.tl.size);
+    blk.tl.lines.forEach((ln, i) => drawTokens(doc, ln, X(midX), Y(blk.t0 + i * 1.15 * blk.tMm), 'center', col('title')));
+    if (blk.sl) {
       doc.setFont('helvetica', 'normal');
-      drawRich(doc, subtitle, X(midX), Y(16.2), { size: 9, minSize: 6, maxWidth: titleW, align: 'center', color: col('subtitle') });
+      doc.setFontSize(blk.sl.size);
+      blk.sl.lines.forEach((ln, i) => drawTokens(doc, ln, X(midX), Y(blk.s0 + i * 1.15 * blk.sMm), 'center', col('subtitle')));
     }
 
     // Name, name.# and section lines, spaced out so there is room to write.
@@ -265,14 +357,14 @@
     const paper = L.PAPER[exam.paper] ? exam.paper : 'letter';
     const [pw, ph] = L.PAPER[paper];
     const doc = new jsPDF({ unit: 'mm', format: paper, orientation: 'portrait', compress: true });
-    doc.setProperties({ title: `${exam.title || 'Exam'} bubble sheets`, creator: 'LambdaGrader' });
+    doc.setProperties({ title: `${exam.name || plain(exam.title) || 'Exam'} bubble sheets`, creator: 'LambdaGrader' });
     const layout = L.build(exam);
     const ox = (pw - L.FRAME_W) / 2;
     const oy = (ph - L.FRAME_H) / 2;
     const pages = opts.students ? opts.students.map((s) => ({ student: s })) : Array.from({ length: opts.copies || 1 }, () => ({}));
     for (let i = 0; i < pages.length; i++) {
       if (i) doc.addPage(paper, 'portrait');
-      drawPage(doc, layout, ox, oy, { title: exam.title, subtitle: exam.subtitle, className: exam.className, headerRight: exam.headerRight, pageNum: exam.pageNum, showLogo: exam.showLogo !== false, colors: exam.colors, student: pages[i].student, pageLabel: `Sheet ${i + 1} of ${pages.length}` });
+      drawPage(doc, layout, ox, oy, { title: exam.title, subtitle: exam.subtitle, className: exam.className, headerRight: exam.headerRight, pageNum: exam.pageNum, showLogo: exam.showLogo !== false, colors: exam.colors, sizes: exam.sizes, student: pages[i].student, pageLabel: `Sheet ${i + 1} of ${pages.length}` });
       if (opts.onProgress && i % 20 === 19) {
         opts.onProgress(i + 1, pages.length);
         await new Promise((r) => setTimeout(r, 0));

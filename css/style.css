@@ -204,3 +204,4 @@ dialog::backdrop { background: rgb(10 14 22 / .55); }
 
 .colored { display: flex; gap: .4rem; align-items: center; }
 .colored input[type=color] { width: 2.6rem; flex: none; padding: .1rem; height: 2.15rem; margin-top: .25rem; cursor: pointer; }
+.colored input.size { width: 4.6rem; flex: none; }
