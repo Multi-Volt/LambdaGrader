@@ -157,6 +157,10 @@
   function renderExam() {
     const ex = exam();
     $('#exTitle').value = ex.title;
+    $('#exSubtitle').value = ex.subtitle || '';
+    $('#exClass').value = ex.className || '';
+    $('#exHeaderRight').value = ex.headerRight || '';
+    $('#exPageNum').value = ex.pageNum || '';
     $('#exQuestions').value = ex.numQuestions;
     $('#exChoices').value = ex.numChoices;
     $('#exDigits').value = ex.idDigits;
@@ -183,6 +187,10 @@
     };
     const errs = L.validateConfig(cfg);
     ex.title = $('#exTitle').value.trim() || 'Untitled exam';
+    ex.subtitle = $('#exSubtitle').value.trim();
+    ex.className = $('#exClass').value.trim();
+    ex.headerRight = $('#exHeaderRight').value.trim();
+    ex.pageNum = $('#exPageNum').value.trim();
     ex.paper = $('#exPaper').value;
     ex.multiScoring = $('#exMulti').value;
     if (errs.length) {
@@ -196,7 +204,7 @@
     renderExamPicker();
     renderExam();
   }
-  ['#exTitle', '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);

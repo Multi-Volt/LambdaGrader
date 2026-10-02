@@ -12,7 +12,7 @@
   function newExam(title) {
     return {
       id: uid(), title: title || 'Exam 1', numQuestions: 50, numChoices: 5, idDigits: 4,
-      paper: 'letter', keyText: '', multiScoring: 'exact', results: [], created: new Date().toISOString(),
+      paper: 'letter', subtitle: '', className: '', headerRight: '', pageNum: '', keyText: '', multiScoring: 'exact', results: [], created: new Date().toISOString(),
     };
   }
 

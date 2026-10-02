@@ -41,6 +41,20 @@
           <label>Title (printed on the sheet)
             <input id="exTitle" type="text" maxlength="120">
           </label>
+          <label>Subtitle (optional, under the title)
+            <input id="exSubtitle" type="text" maxlength="160" placeholder="e.g. Use this sheet to answer ONLY the multiple-choice questions.">
+          </label>
+          <div class="row">
+            <label>Class name (optional, top left)
+              <input id="exClass" type="text" maxlength="24" placeholder="e.g. ECE 2300">
+            </label>
+            <label>Header text (optional, top right)
+              <input id="exHeaderRight" type="text" maxlength="48" placeholder="e.g. Midterm Exam 1">
+            </label>
+            <label>Page number (optional, bottom right)
+              <input id="exPageNum" type="text" maxlength="8" placeholder="e.g. 3">
+            </label>
+          </div>
           <div class="row">
             <label>Questions
               <input id="exQuestions" type="number" min="1" max="255">

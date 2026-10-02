@@ -14,7 +14,7 @@
   }
 
   function drawPage(doc, layout, ox, oy, opts) {
-    const { title, student, pageLabel } = opts;
+    const { title, subtitle, className, headerRight, pageNum, student, pageLabel } = opts;
     const { numQuestions, numChoices, idDigits } = layout.cfg;
     const X = (x) => ox + x;
     const Y = (y) => oy + y;
@@ -46,11 +46,29 @@
     doc.text('LambdaGrader', X(149), ly + 0.1, { baseline: 'middle' });
     doc.setFont('helvetica', 'normal');
 
+    // Optional header text on the code-row line: class name between the top-left
+    // square and the layout code, free text between the code and the top-right square.
+    doc.setFont('helvetica', 'bold');
+    if (className) doc.text(fitText(doc, className, 22, 10, 6), X(half + 2), Y(0), { baseline: 'middle' });
+    if (headerRight) doc.text(fitText(doc, headerRight, 42, 10, 6), X(L.FRAME_W - half - 2), Y(0), { align: 'right', baseline: 'middle' });
+    doc.setFont('helvetica', 'normal');
+
+    // Optional page number above the bottom-right corner square.
+    if (pageNum) {
+      doc.setFontSize(10);
+      doc.text(String(pageNum), X(L.FRAME_W + half), Y(L.FRAME_H - half - 3), { align: 'right', baseline: 'middle' });
+    }
+
     const leftW = idDigits ? layout.idX0 - 14 : L.FRAME_W;
 
     // Title.
     doc.setFont('helvetica', 'bold');
     doc.text(fitText(doc, title || 'Multiple Choice Exam', leftW, 15, 9), X(0), Y(11));
+
+    if (subtitle) {
+      doc.setFont('helvetica', 'normal');
+      doc.text(fitText(doc, subtitle, leftW, 9, 6), X(0), Y(15.7));
+    }
 
     // Name, name.# and section lines.
     doc.setFontSize(9);
@@ -190,7 +208,7 @@
     const pages = opts.students ? opts.students.map((s) => ({ student: s })) : Array.from({ length: opts.copies || 1 }, () => ({}));
     for (let i = 0; i < pages.length; i++) {
       if (i) doc.addPage(paper, 'portrait');
-      drawPage(doc, layout, ox, oy, { title: exam.title, student: pages[i].student, pageLabel: `Sheet ${i + 1} of ${pages.length}` });
+      drawPage(doc, layout, ox, oy, { title: exam.title, subtitle: exam.subtitle, className: exam.className, headerRight: exam.headerRight, pageNum: exam.pageNum, student: pages[i].student, pageLabel: `Sheet ${i + 1} of ${pages.length}` });
       if (opts.onProgress && i % 20 === 19) {
         opts.onProgress(i + 1, pages.length);
         await new Promise((r) => setTimeout(r, 0));
