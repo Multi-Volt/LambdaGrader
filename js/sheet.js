@@ -60,7 +60,7 @@
       sg.t = sg.t.replace(/…$/, '').slice(0, -1);
       if (!sg.t) segs.pop(); else sg.t += '…';
     }
-    let cx = o.align === 'right' ? x - width() : x;
+    let cx = o.align === 'right' ? x - width() : o.align === 'center' ? x - width() / 2 : x;
     for (const sg of segs) {
       const rgb = sg.rgb || o.color || [0, 0, 0];
       doc.setTextColor(rgb[0], rgb[1], rgb[2]);
@@ -120,41 +120,46 @@
 
     const leftW = idDigits ? layout.idX0 - 14 : L.FRAME_W;
 
-    // Title.
+    // Title and subtitle, centered on the page (or on the area left of the ID box when that is too narrow).
+    let midX = L.FRAME_W / 2, titleW = L.FRAME_W;
+    if (idDigits) {
+      titleW = 2 * (leftW - midX);
+      if (titleW < leftW * 0.7) { midX = leftW / 2; titleW = leftW; }
+    }
     doc.setFont('helvetica', 'bold');
-    drawRich(doc, title || 'Multiple Choice Exam', X(0), Y(11), { size: 15, minSize: 9, maxWidth: leftW, color: col('title') });
+    drawRich(doc, title || 'Multiple Choice Exam', X(midX), Y(11), { size: 15, minSize: 9, maxWidth: titleW, align: 'center', color: col('title') });
 
     if (subtitle) {
       doc.setFont('helvetica', 'normal');
-      drawRich(doc, subtitle, X(0), Y(15.7), { size: 9, minSize: 6, maxWidth: leftW, color: col('subtitle') });
+      drawRich(doc, subtitle, X(midX), Y(16.2), { size: 9, minSize: 6, maxWidth: titleW, align: 'center', color: col('subtitle') });
     }
 
-    // Name, name.# and section lines.
+    // Name, name.# and section lines, spaced out so there is room to write.
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setLineWidth(0.25);
-    doc.text('Name', X(0), Y(20));
-    doc.line(X(11), Y(20.8), X(leftW), Y(20.8));
+    doc.text('Name', X(0), Y(26));
+    doc.line(X(11), Y(26.8), X(leftW), Y(26.8));
     const split = leftW * 0.5;
-    doc.text('Name.#', X(0), Y(28));
-    doc.line(X(13.5), Y(28.8), X(split), Y(28.8));
-    doc.text('Section', X(split + 3), Y(28));
-    doc.line(X(split + 16), Y(28.8), X(leftW), Y(28.8));
+    doc.text('Name.#', X(0), Y(35));
+    doc.line(X(13.5), Y(35.8), X(split), Y(35.8));
+    doc.text('Section', X(split + 3), Y(35));
+    doc.line(X(split + 16), Y(35.8), X(leftW), Y(35.8));
     if (student) {
       doc.setFont('helvetica', 'bold');
-      doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(19.8));
-      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(27.8));
+      doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(25.8));
+      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(34.8));
       doc.setFont('helvetica', 'normal');
-      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(27.8));
+      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(34.8));
     }
 
     // Fill example.
     doc.setFontSize(7);
     doc.setTextColor(40);
-    doc.text('Fill bubbles like this:', X(0), Y(39.3));
+    doc.text('Fill bubbles like this:', X(0), Y(41.1));
     doc.setFillColor(0, 0, 0);
-    doc.circle(X(0) + doc.getTextWidth('Fill bubbles like this:') + 3, Y(38.6), L.BUBBLE_R, 'F');
-    doc.text('Use a dark pencil or black/blue pen.', X(0), Y(43.9));
+    doc.circle(X(0) + doc.getTextWidth('Fill bubbles like this:') + 3, Y(40.4), L.BUBBLE_R, 'F');
+    doc.text('Use a dark pencil or black/blue pen.', X(0), Y(45.2));
     doc.setTextColor(0);
 
     // Instructions.
@@ -225,7 +230,7 @@
     // Footer.
     doc.setFontSize(6.5);
     doc.setTextColor(60);
-    const footer = [title ? plain(title) : null, student ? `${student.name}${student.id ? ` (${student.id})` : ''}` : null,
+    const footer = [student ? `${student.name}${student.id ? ` (${student.id})` : ''}` : null,
       `${numQuestions} questions, choices ${L.LETTERS[0]} to ${L.LETTERS[numChoices - 1]}`, pageLabel]
       .filter(Boolean).join('  ·  ');
     doc.text(footer, X(L.FRAME_W / 2), Y(layout.lastRowY + 8), { align: 'center' });
