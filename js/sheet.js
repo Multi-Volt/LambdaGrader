@@ -13,8 +13,66 @@
     return t + '…';
   }
 
+
+  const COLOR_NAMES = {
+    black: '#000000', red: '#c81e1e', orange: '#d9670b', green: '#15803d', blue: '#1a56db',
+    purple: '#7e22ce', gray: '#555555', grey: '#555555',
+  };
+
+  function parseColor(c) {
+    c = String(c || '').trim().toLowerCase();
+    if (COLOR_NAMES[c]) c = COLOR_NAMES[c];
+    let m = /^#([0-9a-f]{6})$/.exec(c) || /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(c);
+    if (!m) return null;
+    const hex = m.length === 2 ? m[1] : m[1] + m[1] + m[2] + m[2] + m[3] + m[3];
+    return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  }
+
+  /** "Midterm {red|Answer Sheet}" -> [{t, rgb}] ; rgb null means the field's own color. */
+  function parseRich(text) {
+    const out = [];
+    let last = 0, m;
+    const re = /\{([^{}|]+)\|([^{}]*)\}/g;
+    const plain = (t) => { if (t) out.push({ t, rgb: null }); };
+    while ((m = re.exec(text))) {
+      const rgb = parseColor(m[1]);
+      if (!rgb) continue;   // not a color: leave the braces as typed
+      plain(text.slice(last, m.index));
+      if (m[2]) out.push({ t: m[2], rgb });
+      last = re.lastIndex;
+    }
+    plain(text.slice(last));
+    return out;
+  }
+
+  /**
+   * Draw text that may contain {color|part} segments, shrunk (then truncated) to
+   * fit maxWidth. The font and base color come from the caller / `color`.
+   */
+  function drawRich(doc, text, x, y, o) {
+    const segs = parseRich(text);
+    const width = () => segs.reduce((w, sg) => w + doc.getTextWidth(sg.t), 0);
+    let size = o.size;
+    doc.setFontSize(size);
+    while (size > o.minSize && width() > o.maxWidth) doc.setFontSize(--size);
+    while (width() > o.maxWidth && segs.length) {
+      const sg = segs[segs.length - 1];
+      sg.t = sg.t.replace(/…$/, '').slice(0, -1);
+      if (!sg.t) segs.pop(); else sg.t += '…';
+    }
+    let cx = o.align === 'right' ? x - width() : x;
+    for (const sg of segs) {
+      const rgb = sg.rgb || o.color || [0, 0, 0];
+      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+      doc.text(sg.t, cx, y, { baseline: o.baseline });
+      cx += doc.getTextWidth(sg.t);
+    }
+    doc.setTextColor(0);
+  }
+
   function drawPage(doc, layout, ox, oy, opts) {
-    const { title, subtitle, className, headerRight, pageNum, student, pageLabel } = opts;
+    const { title, subtitle, className, headerRight, pageNum, showLogo, colors, student, pageLabel } = opts;
+    const col = (k) => parseColor(colors && colors[k]) || [0, 0, 0];
     const { numQuestions, numChoices, idDigits } = layout.cfg;
     const X = (x) => ox + x;
     const Y = (y) => oy + y;
@@ -39,35 +97,36 @@
     }
 
     // LambdaGrader logo on the bottom edge, clear of the student code strip and corner squares.
-    const lx = X(144), ly = Y(L.FRAME_H);
-    if (g.LOGO_PNG) doc.addImage(g.LOGO_PNG, 'PNG', lx - 3.3, ly - 3.3, 6.6, 6.6);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.text('LambdaGrader', X(149), ly + 0.1, { baseline: 'middle' });
-    doc.setFont('helvetica', 'normal');
+    if (showLogo) {
+      const lx = X(144), ly = Y(L.FRAME_H);
+      if (g.LOGO_PNG) doc.addImage(g.LOGO_PNG, 'PNG', lx - 3.3, ly - 3.3, 6.6, 6.6);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text('LambdaGrader', X(149), ly + 0.1, { baseline: 'middle' });
+      doc.setFont('helvetica', 'normal');
+    }
 
     // Optional header text on the code-row line: class name between the top-left
     // square and the layout code, free text between the code and the top-right square.
     doc.setFont('helvetica', 'bold');
-    if (className) doc.text(fitText(doc, className, 22, 10, 6), X(half + 2), Y(0), { baseline: 'middle' });
-    if (headerRight) doc.text(fitText(doc, headerRight, 42, 10, 6), X(L.FRAME_W - half - 2), Y(0), { align: 'right', baseline: 'middle' });
+    if (className) drawRich(doc, className, X(half + 2), Y(0), { size: 10, minSize: 6, maxWidth: 22, baseline: 'middle', color: col('className') });
+    if (headerRight) drawRich(doc, headerRight, X(L.FRAME_W - half - 2), Y(0), { size: 10, minSize: 6, maxWidth: 42, align: 'right', baseline: 'middle', color: col('headerRight') });
     doc.setFont('helvetica', 'normal');
 
     // Optional page number above the bottom-right corner square.
     if (pageNum) {
-      doc.setFontSize(10);
-      doc.text(String(pageNum), X(L.FRAME_W + half), Y(L.FRAME_H - half - 3), { align: 'right', baseline: 'middle' });
+      drawRich(doc, String(pageNum), X(L.FRAME_W + half), Y(L.FRAME_H - half - 3), { size: 10, minSize: 10, maxWidth: 30, align: 'right', baseline: 'middle', color: col('pageNum') });
     }
 
     const leftW = idDigits ? layout.idX0 - 14 : L.FRAME_W;
 
     // Title.
     doc.setFont('helvetica', 'bold');
-    doc.text(fitText(doc, title || 'Multiple Choice Exam', leftW, 15, 9), X(0), Y(11));
+    drawRich(doc, title || 'Multiple Choice Exam', X(0), Y(11), { size: 15, minSize: 9, maxWidth: leftW, color: col('title') });
 
     if (subtitle) {
       doc.setFont('helvetica', 'normal');
-      doc.text(fitText(doc, subtitle, leftW, 9, 6), X(0), Y(15.7));
+      drawRich(doc, subtitle, X(0), Y(15.7), { size: 9, minSize: 6, maxWidth: leftW, color: col('subtitle') });
     }
 
     // Name, name.# and section lines.
@@ -166,7 +225,7 @@
     // Footer.
     doc.setFontSize(6.5);
     doc.setTextColor(60);
-    const footer = [title || null, student ? `${student.name}${student.id ? ` (${student.id})` : ''}` : null,
+    const footer = [title ? plain(title) : null, student ? `${student.name}${student.id ? ` (${student.id})` : ''}` : null,
       `${numQuestions} questions, choices ${L.LETTERS[0]} to ${L.LETTERS[numChoices - 1]}`, pageLabel]
       .filter(Boolean).join('  ·  ');
     doc.text(footer, X(L.FRAME_W / 2), Y(layout.lastRowY + 8), { align: 'center' });
@@ -208,7 +267,7 @@
     const pages = opts.students ? opts.students.map((s) => ({ student: s })) : Array.from({ length: opts.copies || 1 }, () => ({}));
     for (let i = 0; i < pages.length; i++) {
       if (i) doc.addPage(paper, 'portrait');
-      drawPage(doc, layout, ox, oy, { title: exam.title, subtitle: exam.subtitle, className: exam.className, headerRight: exam.headerRight, pageNum: exam.pageNum, student: pages[i].student, pageLabel: `Sheet ${i + 1} of ${pages.length}` });
+      drawPage(doc, layout, ox, oy, { title: exam.title, subtitle: exam.subtitle, className: exam.className, headerRight: exam.headerRight, pageNum: exam.pageNum, showLogo: exam.showLogo !== false, colors: exam.colors, student: pages[i].student, pageLabel: `Sheet ${i + 1} of ${pages.length}` });
       if (opts.onProgress && i % 20 === 19) {
         opts.onProgress(i + 1, pages.length);
         await new Promise((r) => setTimeout(r, 0));
@@ -217,5 +276,8 @@
     return doc.output('blob');
   }
 
-  g.Sheet = { generate };
+  /** Text with {color|part} markup reduced to what is printed. */
+  const plain = (text) => parseRich(String(text || '')).map((sg) => sg.t).join('');
+
+  g.Sheet = { generate, plain };
 })(window);

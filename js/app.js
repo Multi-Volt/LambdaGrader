@@ -12,7 +12,8 @@
   const pct = (v) => (Math.round(v * 10) / 10).toFixed(1);
   const fmtPts = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, ''));
   const today = () => new Date().toISOString().slice(0, 10);
-  const slug = (s) => String(s || 'exam').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exam';
+  const plainText = (s) => (window.Sheet ? window.Sheet.plain(s) : String(s || ''));
+  const slug = (s) => plainText(s || 'exam').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exam';
 
   let toastTimer;
   function toast(msg, kind) {
@@ -141,7 +142,7 @@
   // ---------- exam ----------
   function renderExamPicker() {
     const sel = $('#examSelect');
-    sel.innerHTML = data.exams.map((e) => `<option value="${e.id}">${esc(e.title || 'Untitled')}</option>`).join('');
+    sel.innerHTML = data.exams.map((e) => `<option value="${e.id}">${esc(plainText(e.title) || 'Untitled')}</option>`).join('');
     sel.value = data.activeExamId;
   }
   $('#examSelect').addEventListener('change', (e) => {
@@ -154,6 +155,8 @@
   const choiceSel = $('#exChoices');
   for (let c = 2; c <= L.MAX_CHOICES; c++) choiceSel.add(new Option(`${c} (A–${L.LETTERS[c - 1]})`, c));
 
+  const TEXT_COLOR_FIELDS = [['title', '#exTitleColor'], ['subtitle', '#exSubtitleColor'], ['className', '#exClassColor'], ['headerRight', '#exHeaderRightColor'], ['pageNum', '#exPageNumColor']];
+
   function renderExam() {
     const ex = exam();
     $('#exTitle').value = ex.title;
@@ -161,6 +164,8 @@
     $('#exClass').value = ex.className || '';
     $('#exHeaderRight').value = ex.headerRight || '';
     $('#exPageNum').value = ex.pageNum || '';
+    $('#exLogo').checked = ex.showLogo !== false;
+    for (const [k, sel] of TEXT_COLOR_FIELDS) $(sel).value = (ex.colors && ex.colors[k]) || '#000000';
     $('#exQuestions').value = ex.numQuestions;
     $('#exChoices').value = ex.numChoices;
     $('#exDigits').value = ex.idDigits;
@@ -191,6 +196,9 @@
     ex.className = $('#exClass').value.trim();
     ex.headerRight = $('#exHeaderRight').value.trim();
     ex.pageNum = $('#exPageNum').value.trim();
+    ex.showLogo = $('#exLogo').checked;
+    ex.colors = {};
+    for (const [k, sel] of TEXT_COLOR_FIELDS) if ($(sel).value !== '#000000') ex.colors[k] = $(sel).value;
     ex.paper = $('#exPaper').value;
     ex.multiScoring = $('#exMulti').value;
     if (errs.length) {
@@ -204,7 +212,7 @@
     renderExamPicker();
     renderExam();
   }
-  ['#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);
@@ -487,7 +495,7 @@
     if (secs.includes(cur)) sel.value = cur;
     const ex = exam();
     const n = sheetMode() === 'blank' ? Math.max(1, parseInt($('#sheetCopies').value, 10) || 1) : sheetStudents().length;
-    $('#sheetInfo').textContent = `"${ex.title}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
+    $('#sheetInfo').textContent = `"${plainText(ex.title)}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
     $('#sheetError').textContent = '';
   }
   $$('input[name=sheetMode]').forEach((r) => r.addEventListener('change', renderSheets));

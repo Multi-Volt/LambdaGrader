@@ -39,20 +39,21 @@
         <div class="card">
           <h2>Exam settings</h2>
           <label>Title (printed on the sheet)
-            <input id="exTitle" type="text" maxlength="120">
+            <span class="colored"><input id="exTitle" type="text" maxlength="120"><input id="exTitleColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
           </label>
           <label>Subtitle (optional, under the title)
-            <input id="exSubtitle" type="text" maxlength="160" placeholder="e.g. Use this sheet to answer ONLY the multiple-choice questions.">
+            <span class="colored"><input id="exSubtitle" type="text" maxlength="160" placeholder="e.g. Use this sheet to answer ONLY the multiple-choice questions."><input id="exSubtitleColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
           </label>
+          <p class="hint">Each text can have a color. To color just part of a text, write <code>{red|word}</code> or <code>{#1a56db|word}</code> (red, orange, green, blue, purple, gray, or a hex code).</p>
           <div class="row">
             <label>Class name (optional, top left)
-              <input id="exClass" type="text" maxlength="24" placeholder="e.g. ECE 2300">
+              <span class="colored"><input id="exClass" type="text" maxlength="24" placeholder="e.g. ECE 2300"><input id="exClassColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
             </label>
             <label>Header text (optional, top right)
-              <input id="exHeaderRight" type="text" maxlength="48" placeholder="e.g. Midterm Exam 1">
+              <span class="colored"><input id="exHeaderRight" type="text" maxlength="48" placeholder="e.g. Midterm Exam 1"><input id="exHeaderRightColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
             </label>
             <label>Page number (optional, bottom right)
-              <input id="exPageNum" type="text" maxlength="8" placeholder="e.g. 3">
+              <span class="colored"><input id="exPageNum" type="text" maxlength="8" placeholder="e.g. 3"><input id="exPageNumColor" type="color" value="#000000" title="Text color" aria-label="Text color"></span>
             </label>
           </div>
           <div class="row">
@@ -72,6 +73,7 @@
               </select>
             </label>
           </div>
+          <label class="check"><input id="exLogo" type="checkbox"> Print the LambdaGrader logo at the bottom of the sheet</label>
           <label>Select-all-that-apply questions
             <select id="exMulti">
               <option value="exact">All or nothing: must mark exactly the right bubbles</option>
