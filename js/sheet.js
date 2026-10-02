@@ -226,23 +226,27 @@
       blk.sl.lines.forEach((ln, i) => drawTokens(doc, ln, X(midX), Y(blk.s0 + i * 1.15 * blk.sMm), 'center', col('subtitle')));
     }
 
-    // Name, name.# and section lines, spaced out so there is room to write.
-    doc.setFontSize(9);
+    // Name, name.# and section lines, spaced out so there is room to write. Labels use the
+    // same 12 pt regular type as the instructions.
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
     doc.setLineWidth(0.25);
-    doc.text('Name', X(0), Y(34));
-    doc.line(X(11), Y(34.8), X(leftW), Y(34.8));
     const split = leftW * 0.5;
-    doc.text('Name.#', X(0), Y(43.5));
-    doc.line(X(13.5), Y(44.3), X(split), Y(44.3));
-    doc.text('Section', X(split + 3), Y(43.5));
-    doc.line(X(split + 16), Y(44.3), X(leftW), Y(44.3));
+    const nameLabel = 'Name:', numLabel = 'Name.#:', secLabel = 'Section:';
+    const nameX = doc.getTextWidth(nameLabel) + 2, numX = doc.getTextWidth(numLabel) + 2;
+    const secLabelX = split + 4, secX = secLabelX + doc.getTextWidth(secLabel) + 2;
+    doc.text(nameLabel, X(0), Y(34));
+    doc.line(X(nameX), Y(34.8), X(leftW), Y(34.8));
+    doc.text(numLabel, X(0), Y(43.5));
+    doc.line(X(numX), Y(44.3), X(split), Y(44.3));
+    doc.text(secLabel, X(secLabelX), Y(43.5));
+    doc.line(X(secX), Y(44.3), X(leftW), Y(44.3));
     if (student) {
       doc.setFont('helvetica', 'bold');
-      doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(33.8));
-      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(43.3));
+      doc.text(fitText(doc, student.name || '', leftW - nameX - 2, 12, 7), X(nameX + 1), Y(33.8));
+      if (student.id) doc.text(fitText(doc, student.id, split - numX - 2, 11, 7), X(numX + 1), Y(43.3));
       doc.setFont('helvetica', 'normal');
-      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(43.3));
+      if (student.section) doc.text(fitText(doc, student.section, leftW - secX - 2, 10, 7), X(secX + 1), Y(43.3));
     }
 
     // Instructions box: a bulleted list in regular 12 pt type, then a good/bad bubble example.
@@ -293,9 +297,9 @@
     doc.circle(X(cx), Y(ey), 0.7, 'F');
     cx += 2 * er + 3.5;
     doc.circle(X(cx), Y(ey), er, 'S');                       // check mark
-    doc.setLineWidth(0.45);
-    doc.line(X(cx - 1.5), Y(ey + 0.1), X(cx - 0.4), Y(ey + 1.3));
-    doc.line(X(cx - 0.4), Y(ey + 1.3), X(cx + 1.9), Y(ey - 1.9));
+    doc.setLineWidth(0.4);
+    doc.line(X(cx - 1.2), Y(ey + 0.1), X(cx - 0.4), Y(ey + 1.0));
+    doc.line(X(cx - 0.4), Y(ey + 1.0), X(cx + 1.3), Y(ey - 1.1));
     doc.setLineWidth(0.35);
     cx += 2 * er + 3.5;
     doc.circle(X(cx), Y(ey), er, 'S');                       // X
