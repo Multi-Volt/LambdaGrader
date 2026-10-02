@@ -9,8 +9,8 @@ the computer. There is no server, no account, and no upload.
 - **Prints bubble sheets.** Blank sheets, or personalised ones with each student's name and
   name.# pre-filled. Up to 400 students.
 - **Name.# IDs.** Student IDs like `smith.12`. The number after the dot can repeat
-  (`smith.12` and `jones.12`), so sheets also carry a last-name initial bubble. Personalised
-  sheets add a hidden code that always identifies the exact student.
+  (`smith.12` and `jones.12`). Personalised sheets add a hidden code that always identifies the
+  exact student; on blank sheets you pick between students who share a number when reviewing.
 - **Plaintext answer key.** Type `1. B`, `2. D`… or just `BDACE…`. You can set points, accept
   either of several answers, add **select all that apply** questions (all-or-nothing or partial
   credit), and give free or dropped questions.
@@ -75,17 +75,16 @@ See [`samples/answer-key.txt`](samples/answer-key.txt) and [`samples/roster.csv`
 
 ### Matching sheets to students (name.#)
 
-Each sheet has bubbles for the **number** in the student's name.# and for the **first letter of
-their last name**. A sheet is matched to a student in this order:
+Each sheet has bubbles for the **number** in the student's name.#. A sheet is matched to a student in this order:
 
 1. A student you picked by hand in the review screen.
 2. The code strip along the bottom edge. Only personalised sheets have it, and it is unique
    per student.
-3. The bubbled number, narrowed down by the last-name initial.
+3. The bubbled number.
 
-If the number and initial still fit more than one student (for example `smith.3` and
-`sanchez.3` on a blank sheet), the sheet is flagged. The review screen lists the possible
-students, and you pick the right one by reading the handwritten name on the scan. Personalised
+If the number fits more than one student (for example `smith.3` and `jones.3` on a blank
+sheet), the sheet is flagged. The review screen lists the possible students, and you can also
+search the whole roster by name, name.# or section. Pick the right one by reading the handwritten name on the scan. Personalised
 sheets never have this problem.
 
 Each student's code is kept permanently in the roster, so edit students rather than deleting and

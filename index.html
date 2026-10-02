@@ -51,7 +51,6 @@
             <label>Name.# number digits
               <input id="exDigits" type="number" min="0" max="10">
             </label>
-            <label class="check"><input id="exInitials" type="checkbox"> Last-name initial bubbles</label>
             <label>Paper
               <select id="exPaper">
                 <option value="letter">US Letter</option>
@@ -123,8 +122,8 @@
           <p class="hint">Paste from a spreadsheet or load a CSV. Columns: <code>name.#, name, section</code>.
             A header row with <i>name.#</i> (or <i>username</i>, <i>email</i>, <i>id</i>), <i>name</i> (or <i>first</i> / <i>last</i>) and <i>section</i> is recognised.
             Emails like <code>smith.12@school.edu</code> are trimmed to <code>smith.12</code>.</p>
-          <p class="hint">Numbers after the dot can repeat (<code>smith.12</code> and <code>jones.12</code>). Sheets tell them apart with a
-            last-name initial bubble, and personalised sheets also carry a hidden code that always matches the exact student.</p>
+          <p class="hint">Numbers after the dot can repeat (<code>smith.12</code> and <code>jones.12</code>). Personalised sheets carry a hidden
+            code that always matches the exact student. On blank sheets you pick between students who share a number when reviewing.</p>
           <textarea id="rosterPaste" rows="8" placeholder="lovelace.12, Ada Lovelace, Period 2&#10;turing.12, Alan Turing, Period 2"></textarea>
           <div class="btns">
             <button id="rosterImportPaste">Add pasted rows</button>
@@ -188,9 +187,9 @@ ABCDA DCBAB     or just letters in order;
         <div class="card">
           <h2>Generate bubble sheets</h2>
           <fieldset>
-            <label class="check"><input type="radio" name="sheetMode" value="blank" checked> Blank sheets: students write their name.# and bubble its number and their last-name initial</label>
+            <label class="check"><input type="radio" name="sheetMode" value="blank" checked> Blank sheets: students write their name.# and bubble its number</label>
             <label class="indent">Copies <input id="sheetCopies" type="number" min="1" max="500" value="30"></label>
-            <label class="check"><input type="radio" name="sheetMode" value="roster"> Personalised: one sheet per student, with name, name.# and initial pre-filled</label>
+            <label class="check"><input type="radio" name="sheetMode" value="roster"> Personalised: one sheet per student, with name and name.# pre-filled</label>
             <label class="indent">Section
               <select id="sheetSection"><option value="">All students</option></select>
             </label>
@@ -296,11 +295,11 @@ ABCDA DCBAB     or just letters in order;
         <div class="review-canvas-wrap"><canvas id="rvCanvas"></canvas><p id="rvNoImage" class="hint" hidden>The scan image is no longer in memory (it is only kept for the session it was scanned in). You can still edit the answers below.</p></div>
         <div class="review-side">
           <div class="row rv-read">
-            <label>Initial read <input id="rvInit" maxlength="1" autocomplete="off"></label>
             <label>Name.# number read <input id="rvNum" inputmode="numeric" autocomplete="off"></label>
           </div>
-          <label>Student <select id="rvStudent"></select></label>
           <p id="rvName" class="rv-name"></p>
+          <label>Assign student <input id="rvSearch" type="search" placeholder="Search name, name.# or section" autocomplete="off"></label>
+          <div id="rvPick" class="rv-pick" role="listbox" aria-label="Students"></div>
           <p id="rvScore" class="rv-score"></p>
           <p class="hint">Click a bubble on the image, or below, to toggle it. Filled = read as marked (green if right), green ring = key, red ring = wrong, orange dot = check this question. A + after the number means select all that apply.</p>
           <div id="rvAnswers" class="rv-answers"></div>

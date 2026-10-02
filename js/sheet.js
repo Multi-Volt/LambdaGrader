@@ -71,39 +71,24 @@
       if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(27.8));
     }
 
-    // Last-name initial bubbles.
-    const hasInitials = layout.initials.length > 0;
-    if (hasInitials) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
-      doc.text('FIRST LETTER OF LAST NAME', X(layout.initials[0].x - L.BUBBLE_R), Y(34.6));
-      doc.setFont('helvetica', 'normal');
-      for (const b of layout.initials) bubble(doc, X(b.x), Y(b.y), b.letter, student && student.initial === b.letter);
-    }
-
-    // Fill example beside the initial block (or at the left when there is none).
-    const exX = hasInitials ? layout.initials[12].x + 7 : 0;
-    if (leftW - exX > 30) {
-      doc.setFontSize(7);
-      doc.setTextColor(40);
-      doc.text('Fill bubbles like this:', X(exX), Y(39.3));
-      doc.setFillColor(0, 0, 0);
-      doc.circle(X(exX) + doc.getTextWidth('Fill bubbles like this:') + 3, Y(38.6), L.BUBBLE_R, 'F');
-      doc.text('Use a dark pencil or black/blue pen.', X(exX), Y(43.9));
-      doc.setTextColor(0);
-    }
+    // Fill example.
+    doc.setFontSize(7);
+    doc.setTextColor(40);
+    doc.text('Fill bubbles like this:', X(0), Y(39.3));
+    doc.setFillColor(0, 0, 0);
+    doc.circle(X(0) + doc.getTextWidth('Fill bubbles like this:') + 3, Y(38.6), L.BUBBLE_R, 'F');
+    doc.text('Use a dark pencil or black/blue pen.', X(0), Y(43.9));
+    doc.setTextColor(0);
 
     // Instructions.
     doc.setDrawColor(60);
     doc.setLineWidth(0.2);
     doc.roundedRect(X(0), Y(47.5), leftW, 19.5, 1.5, 1.5, 'S');
     doc.setFont('helvetica', 'normal');
-    const bubbleHelp = [idDigits && ' Bubble its number at right', hasInitials && ' Bubble the first letter of your last name']
-      .filter(Boolean).join(' and') + (idDigits || hasInitials ? '.' : '');
     const lines = [
       'Fill each bubble completely. Mark one answer per question unless it says "select all that apply".',
-      student ? `Your name${idDigits ? ', name.# number' : ''}${hasInitials ? ' and last-name initial' : ''} ${idDigits || hasInitials ? 'are' : 'is'} pre-filled. Do not change them.`
-        : `Write your name and name.# above.${bubbleHelp}`,
+      student ? `Your name${idDigits ? ' and name.# number are' : ' is'} pre-filled. Do not change them.`
+        : `Write your name and name.# above.${idDigits ? ' Bubble its number at right.' : ''}`,
       'Erase changes completely. Do not fold this sheet.',
       'Do not write on or near the black squares.',
     ];

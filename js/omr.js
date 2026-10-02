@@ -273,13 +273,7 @@
       if (marked.length === 1) id += String(marked[0]);
       else if (marked.length > 1) { id += '?'; idProblem = true; }
     }
-    let initial = '';
-    if (read.initFills && read.initFills.length) {
-      const { marked } = decide(read.initFills, T);
-      if (marked.length === 1) initial = L.INITIALS[marked[0]];
-      else if (marked.length > 1) { initial = '?'; idProblem = true; }
-    }
-    return { answers, flags, studentId: id, initial, idProblem };
+    return { answers, flags, studentId: id, idProblem };
   }
 
   /**
@@ -320,7 +314,6 @@
     const { img, H, white, black } = r;
     const qFills = layout.questions.map((q) => q.bubbles.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black)));
     const idFills = layout.id.map((c) => c.bubbles.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black)));
-    let initFills = layout.initials.map((b) => darkness(img, H, BUBBLE_PTS, b.x, b.y, white, black));
     // Subtract the blank level (printed letter/digit + paper tone) measured on this page.
     // For each answer letter, most questions leave it blank, so a low percentile over
     // the questions is that letter's empty-bubble darkness.
@@ -331,19 +324,17 @@
         qFills.forEach((f) => { f[i] = adjust(f[i], base); });
       }
     }
-    const idBase = Math.min(0.35, percentile(idFills.flat().concat(initFills), 0.3));
+    const idBase = Math.min(0.35, percentile(idFills.flat(), 0.3));
     idFills.forEach((col) => col.forEach((v, d) => { col[d] = adjust(v, idBase); }));
-    initFills = initFills.map((v) => adjust(v, idBase));
     const keyBits = layout.keyStrip.map((p) => (darkness(img, H, CODE_PTS, p.x, p.y, white, black) > 0.5 ? 1 : 0));
     const key = L.decodeKey(keyBits);
     if (key === null) warnings.push('Student code strip at the bottom edge is damaged; matched by name.# instead.');
-    const all = qFills.flat().concat(idFills.flat(), initFills);
+    const all = qFills.flat().concat(idFills.flat());
     const autoT = Math.max(0.3, Math.min(0.6, otsu(all)));
     return {
       cfg, H, rotated: r.rotated, warnings, autoThreshold: autoT,
       qFills: qFills.map((a) => a.map((v) => Math.round(v * 1000) / 1000)),
       idFills: idFills.map((a) => a.map((v) => Math.round(v * 1000) / 1000)),
-      initFills: initFills.map((v) => Math.round(v * 1000) / 1000),
       key: key || 0,
       fiducials: r.fid.map((f) => [f.x, f.y]),
     };

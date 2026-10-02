@@ -34,16 +34,9 @@
   const ID_BOX_TOP = 13.5;
   const ID_BOX_H = 5;
 
-  // Last-name initial: 26 bubbles (A–Z) in two rows of 13, in the left header.
-  const INIT_X0 = 3.8;
-  const INIT_DX = 4.6;
-  const INIT_Y0 = 38.6;
-  const INIT_DY = 4.6;
-  const INITIALS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
   // Student code strip along the bottom edge. Personalised sheets print a
   // roster key here (10 bits + 2 parity bits) so they match exactly, even when
-  // two students share a name.# number and initial. Blank sheets leave it empty.
+  // two students share a name.# number. Blank sheets leave it empty.
   const KEY_BITS = 12;
 
   const PAPER = { letter: [215.9, 279.4], a4: [210, 297] };
@@ -79,7 +72,6 @@
   /** Build every printable/readable position for a configuration. */
   function build(cfg) {
     const { numQuestions: nq, numChoices: nc, idDigits: nd } = cfg;
-    const ni = cfg.initials !== false;
     const colsNeeded = Math.ceil(nq / Q_MAX_ROWS);
     const rows = Math.ceil(nq / colsNeeded);
     const minW = columnWidth(nc);
@@ -108,22 +100,18 @@
 
     const code = encodeCode(cfg).map((bit, i) => ({ x: CODE_X0 + i * CODE_DX, y: 0, bit }));
 
-    const initials = !ni ? [] : [...INITIALS].map((letter, i) => ({
-      letter, x: INIT_X0 + (i % 13) * INIT_DX, y: INIT_Y0 + Math.floor(i / 13) * INIT_DY,
-    }));
     // Offset by half a step so an upside-down strip never overlaps the layout code.
     const keyStrip = Array.from({ length: KEY_BITS }, (_, i) => ({ x: CODE_X0 + CODE_DX / 2 + i * CODE_DX, y: FRAME_H }));
 
     return {
-      cfg: { numQuestions: nq, numChoices: nc, idDigits: nd, initials: ni },
-      questions, id, idX0, code, rows, initials, keyStrip,
+      cfg: { numQuestions: nq, numChoices: nc, idDigits: nd },
+      questions, id, idX0, code, rows, keyStrip,
       lastRowY: rowY(rows - 1),
     };
   }
 
   function encodeCode(cfg) {
-    const v = (cfg.numQuestions & 255) | (((cfg.numChoices - 2) & 7) << 8) | ((cfg.idDigits & 15) << 11) |
-      ((cfg.initials === false ? 0 : 1) << 15);
+    const v = (cfg.numQuestions & 255) | (((cfg.numChoices - 2) & 7) << 8) | ((cfg.idDigits & 15) << 11);  // bit 15 unused (was last-name initials)
     const bits = [];
     let ones = 0;
     for (let i = 0; i < CODE_BITS - 1; i++) {
@@ -142,7 +130,7 @@
       if (i < CODE_BITS - 1) v |= bits[i] << i;
     }
     if (ones % 2 !== 0) return null;
-    const cfg = { numQuestions: v & 255, numChoices: ((v >> 8) & 7) + 2, idDigits: (v >> 11) & 15, initials: ((v >> 15) & 1) === 1 };
+    const cfg = { numQuestions: v & 255, numChoices: ((v >> 8) & 7) + 2, idDigits: (v >> 11) & 15 };
     return validateConfig(cfg).length ? null : cfg;
   }
 
@@ -166,7 +154,7 @@
     FRAME_W, FRAME_H, FIDUCIAL, CODE_BITS, CODE_X0, CODE_DX, CODE_SIZE, BUBBLE_R, ID_DX, ID_DY, ID_TOP,
     ID_BOX_TOP, ID_BOX_H, PAPER, LETTERS, MAX_CHOICES, MAX_ID_DIGITS,
     fiducials: [[0, 0], [FRAME_W, 0], [0, FRAME_H], [FRAME_W, FRAME_H]],
-    INITIALS, KEY_BITS, MAX_KEY: 1023,
+    KEY_BITS, MAX_KEY: 1023,
     maxQuestions, validateConfig, build, encodeCode, decodeCode, encodeKey, decodeKey,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

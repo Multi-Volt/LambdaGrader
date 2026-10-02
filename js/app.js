@@ -65,7 +65,7 @@
   /**
    * Returns a function that finds the roster student for a scanned result.
    * Order: a student picked by hand, then the code strip on personalised sheets,
-   * then the bubbled name.# number narrowed by the last-name initial.
+   * then the bubbled name.# number.
    */
   function buildMatcher() {
     const byKey = rosterByKey();
@@ -74,7 +74,7 @@
       const p = S.idParts(st);
       if (!p.num) continue;
       if (!byNum.has(p.num)) byNum.set(p.num, []);
-      byNum.get(p.num).push({ st, initial: p.initial });
+      byNum.get(p.num).push(st);
     }
     return (r) => {
       if (r.manual) {
@@ -91,20 +91,13 @@
       if (num.includes('?')) return { issue: 'name.# number unclear', candidates: [] };
       const cands = byNum.get(num) || [];
       if (!cands.length) return { issue: data.roster.length ? `.${num} is not in the roster` : '', candidates: [] };
-      const init = r.initial && r.initial !== '?' ? r.initial : '';
-      const narrowed = init ? cands.filter((c) => c.initial === init) : cands;
-      if (narrowed.length === 1) return { student: narrowed[0].st, how: 'name.#' };
-      if (!narrowed.length && cands.length === 1) {
-        return { student: cands[0].st, how: 'name.#', issue: `initial ${init} does not match ${cands[0].st.id}` };
-      }
-      const list = narrowed.length ? narrowed : cands;
-      return { issue: `could be ${list.map((c) => c.st.id || c.st.name).join(' or ')}`, candidates: list.map((c) => c.st) };
+      if (cands.length === 1) return { student: cands[0], how: 'name.#' };
+      return { issue: `could be ${cands.map((st) => st.id || st.name).join(' or ')}`, candidates: cands };
     };
   }
 
   function readIdLabel(r) {
-    if (!r.num && !r.initial) return '';
-    return `${r.initial || '?'}….${r.num || '?'}`;
+    return r.num ? `….${r.num}` : '';
   }
 
   function scoreOf(r) {
@@ -167,7 +160,6 @@
     $('#exQuestions').value = ex.numQuestions;
     $('#exChoices').value = ex.numChoices;
     $('#exDigits').value = ex.idDigits;
-    $('#exInitials').checked = ex.initials !== false;
     $('#exMulti').value = ex.multiScoring || 'exact';
     $('#exPaper').value = ex.paper;
     $('#exErrors').textContent = '';
@@ -188,7 +180,6 @@
       numQuestions: parseInt($('#exQuestions').value, 10),
       numChoices: parseInt($('#exChoices').value, 10),
       idDigits: parseInt($('#exDigits').value, 10),
-      initials: $('#exInitials').checked,
     };
     const errs = L.validateConfig(cfg);
     ex.title = $('#exTitle').value.trim() || 'Untitled exam';
@@ -205,12 +196,12 @@
     renderExamPicker();
     renderExam();
   }
-  ['#exTitle', '#exQuestions', '#exChoices', '#exDigits', '#exInitials', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exTitle', '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);
     const cur = exam();
-    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, idDigits: cur.idDigits, initials: cur.initials, paper: cur.paper, multiScoring: cur.multiScoring });
+    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, idDigits: cur.idDigits, paper: cur.paper, multiScoring: cur.multiScoring });
     data.exams.push(e);
     data.activeExamId = e.id;
     save();
@@ -286,14 +277,14 @@
       seenId.set(st.id, st);
       const p = S.idParts(st);
       if (ex.idDigits && p.num.length > ex.idDigits) long++;
-      const k = `${ex.initials !== false ? p.initial : ''}.${p.num}`;
+      const k = p.num;
       pairs.set(k, [...(pairs.get(k) || []), st]);
     }
     const twins = [...pairs.values()].filter((l) => l.length > 1);
     const out = [];
     if (missing) out.push(`${missing} student(s) have no name.#. Their personalised sheets still match; on blank sheets pick them by hand in review.`);
     if (dup.size) out.push(`Listed twice: ${[...dup].join(', ')}.`);
-    if (twins.length) out.push(`Same number and same last-name initial: ${twins.map((l) => l.map((st) => st.id).join(' / ')).join('; ')}. Use personalised sheets for them, or pick by hand in review.`);
+    if (twins.length) out.push(`${twins.length} name.# number(s) are shared by several students. Personalised sheets tell them apart; on blank sheets you pick the student when reviewing.`);
     if (long) out.push(`${long} name.# number(s) are longer than the ${ex.idDigits} digits on this exam's sheet.`);
     return { text: out.join(' '), dup };
   }
@@ -488,7 +479,7 @@
     if (secs.includes(cur)) sel.value = cur;
     const ex = exam();
     const n = sheetMode() === 'blank' ? Math.max(1, parseInt($('#sheetCopies').value, 10) || 1) : sheetStudents().length;
-    $('#sheetInfo').textContent = `"${ex.title}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'}${ex.initials === false ? ' · no initial bubbles' : ''} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
+    $('#sheetInfo').textContent = `"${ex.title}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
     $('#sheetError').textContent = '';
   }
   $$('input[name=sheetMode]').forEach((r) => r.addEventListener('change', renderSheets));
@@ -596,7 +587,7 @@
     const ex = exam();
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const gray = window.OMR.toGray(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits, initials: ex.initials !== false });
+    const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits });
     const T = thresholdFor(read);
     const it = window.OMR.interpret(read, T, G.multiSelectSet(getKey()));
     const warnings = read.warnings.slice();
@@ -606,7 +597,7 @@
     }
     if (it.idProblem) it.flags.push({ q: 0, type: 'id' });
     const result = {
-      id: S.uid(), source, num: S.stripZeros(it.studentId), initial: it.initial, sheetKey: read.key || 0, answers: fitAnswers(it.answers, ex.numQuestions),
+      id: S.uid(), source, num: S.stripZeros(it.studentId), sheetKey: read.key || 0, answers: fitAnswers(it.answers, ex.numQuestions),
       flags: it.flags.filter((f) => f.q <= ex.numQuestions), warnings, threshold: Math.round(T * 100) / 100,
       scannedAt: new Date().toISOString(),
     };
@@ -700,7 +691,7 @@
       const T = thresholdFor(img.read);
       const it = window.OMR.interpret(img.read, T, G.multiSelectSet(getKey()));
       r.answers = fitAnswers(it.answers, exam().numQuestions);
-      if (!r.idEdited) { r.num = S.stripZeros(it.studentId); r.initial = it.initial; }
+      if (!r.idEdited) { r.num = S.stripZeros(it.studentId); }
       r.flags = it.flags.filter((f) => f.q <= exam().numQuestions);
       if (it.idProblem) r.flags.push({ q: 0, type: 'id' });
       r.threshold = Math.round(T * 100) / 100;
@@ -868,6 +859,7 @@
       im.onload = () => { if (rv && rv.id === id) { rv.image = im; drawReview(); } };
       im.src = rv.img.url;
     }
+    $('#rvSearch').value = '';
     renderReviewSide();
   }
 
@@ -957,17 +949,10 @@
     const sc = scoreOf(r);
     $('#rvTitle').textContent = `Review · ${r.source}`;
     if (document.activeElement !== $('#rvNum')) $('#rvNum').value = r.num || '';
-    if (document.activeElement !== $('#rvInit')) $('#rvInit').value = r.initial || '';
-    const opt = (st) => `<option value="${st.key}">${esc(st.name)}${st.id ? ` (${esc(st.id)})` : ''}</option>`;
-    const sorted = data.roster.slice().sort((x, y) => x.name.localeCompare(y.name));
-    const sel = $('#rvStudent');
-    sel.innerHTML = `<option value="auto">Automatic (from the sheet)</option>` +
-      (a.candidates.length ? `<optgroup label="Possible matches">${a.candidates.map(opt).join('')}</optgroup>` : '') +
-      `<optgroup label="All students">${sorted.map(opt).join('')}</optgroup>`;
-    sel.value = r.manual ? String(r.studentKey) : 'auto';
+    renderStudentPick(a);
     $('#rvName').textContent = student
       ? `${student.name}${student.id ? ` (${student.id})` : ''}${student.section ? ' · ' + student.section : ''} · matched by ${a.how}`
-      : (a.issues[0] || 'No student matched') + '. Pick the student below.';
+      : (a.issues[0] || 'No student matched') + '. Search for the student below.';
     $('#rvName').className = 'rv-name ' + (student ? '' : 'bad');
     $('#rvScore').textContent = `Score ${fmtPts(sc.score)} / ${fmtPts(sc.possible)} (${pct(sc.percent)}%)`;
     const key = getKey();
@@ -987,7 +972,7 @@
       html += '</div>';
     }
     $('#rvAnswers').innerHTML = html;
-    const names = { multiple: 'more than one bubble marked', erasure: 'possible erasure, darkest mark used', faint: 'faint or partial mark', id: 'name.# number or initial bubbles unclear' };
+    const names = { multiple: 'more than one bubble marked', erasure: 'possible erasure, darkest mark used', faint: 'faint or partial mark', id: 'name.# number bubbles unclear' };
     const items = (r.flags || []).map((f) => `<li>${f.q ? 'Q' + f.q : 'ID'}: ${names[f.type] || f.type}</li>`)
       .concat((r.warnings || []).map((w) => `<li>${esc(w)}</li>`));
     $('#rvFlags').innerHTML = items.join('') + (items.length ? '<li><button type="button" id="rvClearFlags">Mark reviewed (clear flags)</button></li>' : '');
@@ -1007,20 +992,54 @@
   });
   function setReviewRead() {
     rv.r.num = S.stripZeros($('#rvNum').value.replace(/[^\d?]/g, ''));
-    rv.r.initial = $('#rvInit').value.replace(/[^a-z?]/gi, '').slice(0, 1).toUpperCase();
     rv.r.idEdited = true;
     rv.r.flags = (rv.r.flags || []).filter((f) => f.q !== 0);
     save();
     renderReviewSide();
   }
   $('#rvNum').addEventListener('change', setReviewRead);
-  $('#rvInit').addEventListener('change', setReviewRead);
-  $('#rvStudent').addEventListener('change', (e) => {
+
+  /** Searchable student list: possible matches when the box is empty, roster hits while typing. */
+  const PICK_LIMIT = 50;
+  function renderStudentPick(a) {
     const r = rv.r;
-    if (e.target.value === 'auto') { r.manual = false; delete r.studentKey; }
-    else { r.manual = true; r.studentKey = Number(e.target.value); r.flags = (r.flags || []).filter((f) => f.q !== 0); }
+    const words = $('#rvSearch').value.toLowerCase().split(/\s+/).filter(Boolean);
+    const cur = r.manual ? r.studentKey : null;
+    const opt = (st) => `<button type="button" role="option" data-key="${st.key}" aria-selected="${st.key === cur}">` +
+      `${esc(st.name)}${st.id ? ` <small>(${esc(st.id)})</small>` : ''}${st.section ? ` <small>· ${esc(st.section)}</small>` : ''}</button>`;
+    let html = '';
+    if (!words.length) {
+      if (r.manual) html += '<button type="button" role="option" data-key="auto">Automatic (from the sheet)</button>';
+      if (a.candidates.length) html += '<div class="grp">Possible matches</div>' + a.candidates.map(opt).join('');
+    } else {
+      const hits = data.roster.filter((st) => {
+        const hay = `${st.name} ${st.id} ${st.section}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      }).sort((x, y) => x.name.localeCompare(y.name));
+      html = hits.length ? hits.slice(0, PICK_LIMIT).map(opt).join('') +
+        (hits.length > PICK_LIMIT ? `<div class="grp">${hits.length - PICK_LIMIT} more, keep typing</div>` : '')
+        : '<div class="grp">No students match</div>';
+    }
+    $('#rvPick').innerHTML = html;
+  }
+  function pickStudent(key) {
+    const r = rv.r;
+    if (key === 'auto') { r.manual = false; delete r.studentKey; }
+    else { r.manual = true; r.studentKey = Number(key); r.flags = (r.flags || []).filter((f) => f.q !== 0); }
+    $('#rvSearch').value = '';
     save();
     renderReviewSide();
+  }
+  $('#rvPick').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-key]');
+    if (b) pickStudent(b.dataset.key);
+  });
+  $('#rvSearch').addEventListener('input', () => renderStudentPick(annotateResults().find((x) => x.r === rv.r)));
+  $('#rvSearch').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();  // the dialog is a form; Enter would close it
+    const first = $('#rvPick button[data-key]');
+    if (first) pickStudent(first.dataset.key);
   });
   $('#rvUseAsKey').addEventListener('click', () => {
     const ex = exam();

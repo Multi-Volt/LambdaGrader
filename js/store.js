@@ -26,20 +26,12 @@
     return String(v ?? '').trim().toLowerCase().replace(/@.*$/, '').replace(/\s+/g, '');
   }
 
-  function lastNameOf(name) {
-    const n = String(name || '').trim();
-    if (n.includes(',')) return n.split(',')[0].trim();
-    const parts = n.split(/\s+/);
-    return parts[parts.length - 1] || '';
-  }
-
-  /** The parts a sheet can carry: the number and the last-name initial. */
+  /** The number a sheet can carry. */
   function idParts(student) {
     const m = String(student.id || '').match(/^([a-z][a-z'\-]*)\.(\d+)$/i);
-    if (m) return { num: stripZeros(m[2]), initial: m[1][0].toUpperCase() };
+    if (m) return { num: stripZeros(m[2]) };
     const digits = String(student.id || '').replace(/\D/g, '');
-    const initial = (lastNameOf(student.name).replace(/[^a-z]/gi, '')[0] || '').toUpperCase();
-    return { num: digits ? stripZeros(digits) : '', initial };
+    return { num: digits ? stripZeros(digits) : '' };
   }
 
   /**
@@ -77,7 +69,7 @@
       for (const r of e.results) {
         // Results saved before name.# support stored the bubbled digits as studentId.
         if (r.num === undefined) r.num = stripZeros(String(r.studentId || ''));
-        if (r.initial === undefined) r.initial = '';
+        delete r.initial;
         delete r.studentId;
       }
     }
@@ -125,5 +117,5 @@
 
   g.Store = {
     load, save, wipe, sanitize, newExam, blank, uid, bytesUsed, MAX_STUDENTS,
-    normalizeId, idParts, assignKeys, stripZeros, lastNameOf, get lastError() { return lastError; } };
+    normalizeId, idParts, assignKeys, stripZeros, get lastError() { return lastError; } };
 })(window);

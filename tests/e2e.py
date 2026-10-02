@@ -24,18 +24,18 @@ random.seed(4)
 
 ROSTER = [  # name.#, name, section
     ('lovelace.12', 'Ada Lovelace', 'Period 1'),
-    ('turing.12', 'Alan Turing', 'Period 1'),       # same number as lovelace, different initial
+    ('turing.12', 'Alan Turing', 'Period 1'),       # same number as lovelace
     ('hopper.7', 'Grace Hopper', 'Period 2'),
-    ('hughes.7', 'Langston Hughes', 'Period 2'),    # same number AND initial as hopper
+    ('hughes.7', 'Langston Hughes', 'Period 2'),    # same number as hopper
     ('johnson.31', 'Katherine Johnson', 'Period 2'),
     ('liskov.5', 'Barbara Liskov', 'Period 1'),
 ]
-# Blank sheets filled in by hand: (who, number bubbled, initial bubbled, expected match or None=ambiguous)
+# Blank sheets filled in by hand: (who, number bubbled, expected match or None=ambiguous)
 BLANK = [
-    ('turing.12', '12', 'T', 'turing.12'),
-    ('hopper.7', '7', 'H', None),        # hopper.7 vs hughes.7: must be flagged
-    ('lovelace.12', '12', '', None),     # forgot the initial: lovelace.12 vs turing.12
-    ('liskov.5', '5', 'L', 'liskov.5'),
+    ('johnson.31', '31', 'johnson.31'),
+    ('hopper.7', '7', None),             # hopper.7 vs hughes.7: must be flagged
+    ('lovelace.12', '12', None),         # lovelace.12 vs turing.12
+    ('liskov.5', '5', 'liskov.5'),
 ]
 
 key = [random.choice(LET) for _ in range(NQ)]
@@ -70,7 +70,7 @@ def student_answers():
     return ans
 
 
-def fill(page, layout, ans, num=None, initial=None, erase_on=None):
+def fill(page, layout, ans, num=None, erase_on=None):
     pw, ph = page.rect.width / 72 * 25.4, page.rect.height / 72 * 25.4
     ox, oy = (pw - 180) / 2, (ph - 250) / 2
     mm = 72 / 25.4
@@ -87,8 +87,6 @@ def fill(page, layout, ans, num=None, initial=None, erase_on=None):
         digits = num.rjust(ND, '0')
         for j, d in enumerate(digits):
             dot(layout['id'][j]['bubbles'][int(d)])
-    if initial:
-        dot(layout['initials'][ord(initial) - 65])
     if erase_on is not None:
         q = erase_on
         l = next(c for c in LET if c not in ans[q])
@@ -162,9 +160,9 @@ def main():
                 fill(page, layout, ans, erase_on=1 if i == 1 else None)
                 expected.append((ans, printed[i]))
             bdoc = fitz.open(f'{OUT}/blank.pdf')
-            for page, (who, num, init, match) in zip(bdoc, BLANK):
+            for page, (who, num, match) in zip(bdoc, BLANK):
                 ans = student_answers()
-                fill(page, layout, ans, num=num, initial=init)
+                fill(page, layout, ans, num=num)
                 expected.append((ans, match))
             doc.insert_pdf(bdoc)
             doc.save(f'{OUT}/filled.pdf')
@@ -213,9 +211,10 @@ def main():
             pg.evaluate(f"window.__omrApp.openReview(window.__omrApp.data.exams[0].results[{amb}].id)")
             time.sleep(0.5)
             pg.screenshot(path=f'{OUT}/review.png')
-            opts = pg.eval_on_selector_all('#rvStudent optgroup[label="Possible matches"] option', 'els => els.map(e => e.textContent)')
+            opts = pg.eval_on_selector_all('#rvPick button[data-key]', 'els => els.map(e => e.textContent)')
             print('review suggests:', opts)
-            pg.select_option('#rvStudent', index=1)
+            pg.fill('#rvSearch', BLANK[1][0])  # search the roster for the right student
+            pg.click('#rvPick button[data-key]')
             pg.keyboard.press('Escape')
             fixed = pg.evaluate(f"window.__omrApp.annotate()[{amb}].student.id")
             print('after picking by hand:', fixed)
