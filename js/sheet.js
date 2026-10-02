@@ -180,7 +180,7 @@
 
     // Optional header text on the code-row line: class name between the top-left
     // square and the layout code, free text between the code and the top-right square.
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('helvetica', 'normal');
     if (className) drawRich(doc, className, X(half + 2), Y(0), { size: sz('className'), minSize: 6, maxWidth: 22, baseline: 'middle', color: col('className') });
     if (headerRight) drawRich(doc, headerRight, X(L.FRAME_W - half - 2), Y(0), { size: sz('headerRight'), minSize: 6, maxWidth: 42, align: 'right', baseline: 'middle', color: col('headerRight') });
     doc.setFont('helvetica', 'normal');
