@@ -207,7 +207,7 @@
     ex.sizes = {};
     for (const [k, sel] of TEXT_SIZE_FIELDS) {
       const v = parseFloat($(sel).value);
-      if (v > 0) ex.sizes[k] = Math.max(6, Math.min(40, v));
+      if (v > 0) ex.sizes[k] = Math.max(6, Math.min(k === 'title' || k === 'subtitle' ? 72 : 40, v));
     }
     ex.paper = $('#exPaper').value;
     ex.multiScoring = $('#exMulti').value;
@@ -222,6 +222,11 @@
     renderExamPicker();
     renderExam();
   }
+  // The exam picker follows the name as you type.
+  $('#exName').addEventListener('input', () => {
+    exam().name = $('#exName').value.trim() || 'Untitled exam';
+    renderExamPicker();
+  });
   ['#exName', '#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), ...TEXT_SIZE_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {

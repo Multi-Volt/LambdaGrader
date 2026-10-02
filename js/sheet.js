@@ -144,7 +144,7 @@
     const { title, subtitle, className, headerRight, pageNum, showLogo, colors, sizes, student, pageLabel } = opts;
     const col = (k) => parseColor(colors && colors[k]) || [0, 0, 0];
     const DEFAULT_SIZES = { title: 20, subtitle: 11, className: 10, headerRight: 10, pageNum: 10 };
-    const sz = (k) => Math.max(6, Math.min(40, Number(sizes && sizes[k]) || DEFAULT_SIZES[k]));
+    const sz = (k) => Math.max(6, Math.min(k === 'title' || k === 'subtitle' ? 72 : 40, Number(sizes && sizes[k]) || DEFAULT_SIZES[k]));
     const { numQuestions, numChoices, idDigits } = layout.cfg;
     const X = (x) => ox + x;
     const Y = (y) => oy + y;
@@ -199,10 +199,10 @@
       textW = 2 * (leftW - midX);
       if (textW < leftW * 0.7) { midX = leftW / 2; textW = leftW; }
     }
-    const MM = 0.3528, TOP = 4.5, LIMIT = 22.5;
+    const MM = 0.3528, TOP = 8, LIMIT = 28;
     const titleText = title || 'Multiple Choice Exam';
     let blk;
-    for (let f = 1; ; f -= 0.05) {
+    for (let f = 1; ; f -= 0.04) {
       doc.setFont('helvetica', 'bold');
       const tl = layoutRich(doc, titleText, sz('title') * f, 6, textW, 2);
       let sl = null;
@@ -215,7 +215,7 @@
       const s0 = tEnd + 0.3 * tMm + 1.8 + 0.74 * sMm;
       const end = sl ? s0 + (sl.lines.length - 1) * 1.15 * sMm + 0.25 * sMm : tEnd + 0.25 * tMm;
       blk = { tl, sl, t0, s0, tMm, sMm };
-      if (end <= LIMIT || f <= 0.4) break;
+      if (end <= LIMIT || f <= 0.1) break;
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(blk.tl.size);
@@ -230,34 +230,35 @@
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setLineWidth(0.25);
-    doc.text('Name', X(0), Y(26));
-    doc.line(X(11), Y(26.8), X(leftW), Y(26.8));
+    doc.text('Name', X(0), Y(33));
+    doc.line(X(11), Y(33.8), X(leftW), Y(33.8));
     const split = leftW * 0.5;
-    doc.text('Name.#', X(0), Y(35));
-    doc.line(X(13.5), Y(35.8), X(split), Y(35.8));
-    doc.text('Section', X(split + 3), Y(35));
-    doc.line(X(split + 16), Y(35.8), X(leftW), Y(35.8));
+    doc.text('Name.#', X(0), Y(42));
+    doc.line(X(13.5), Y(42.8), X(split), Y(42.8));
+    doc.text('Section', X(split + 3), Y(42));
+    doc.line(X(split + 16), Y(42.8), X(leftW), Y(42.8));
     if (student) {
       doc.setFont('helvetica', 'bold');
-      doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(25.8));
-      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(34.8));
+      doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(32.8));
+      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(41.8));
       doc.setFont('helvetica', 'normal');
-      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(34.8));
+      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(41.8));
     }
 
-    // Fill example.
+    // Fill example (one line, to leave room above for a bigger title).
     doc.setFontSize(7);
     doc.setTextColor(40);
-    doc.text('Fill bubbles like this:', X(0), Y(41.1));
+    const fillLead = 'Fill bubbles like this:';
+    doc.text(fillLead, X(0), Y(48.3));
     doc.setFillColor(0, 0, 0);
-    doc.circle(X(0) + doc.getTextWidth('Fill bubbles like this:') + 3, Y(40.4), L.BUBBLE_R, 'F');
-    doc.text('Use a dark pencil or black/blue pen.', X(0), Y(45.2));
+    doc.circle(X(0) + doc.getTextWidth(fillLead) + 3, Y(47.6), L.BUBBLE_R, 'F');
+    doc.text('Use a dark pencil or black/blue pen.', X(0) + doc.getTextWidth(fillLead) + 8, Y(48.3));
     doc.setTextColor(0);
 
     // Instructions.
     doc.setDrawColor(60);
     doc.setLineWidth(0.2);
-    doc.roundedRect(X(0), Y(47.5), leftW, 19.5, 1.5, 1.5, 'S');
+    doc.roundedRect(X(0), Y(51), leftW, 16, 1.5, 1.5, 'S');
     doc.setFont('helvetica', 'normal');
     const lines = [
       'Fill each bubble completely. Mark one answer per question unless it says "select all that apply".',
@@ -268,7 +269,7 @@
     ];
     lines.forEach((t, i) => {
       const fitted = fitText(doc, t, leftW - 6, 7.5, 5.5);
-      doc.text(fitted, X(3), Y(52 + i * 4.2));
+      doc.text(fitted, X(3), Y(55.5 + i * 3.5));
     });
 
     // Student ID grid.
