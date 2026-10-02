@@ -199,7 +199,7 @@
       textW = 2 * (leftW - midX);
       if (textW < leftW * 0.7) { midX = leftW / 2; textW = leftW; }
     }
-    const MM = 0.3528, TOP = 8, LIMIT = 28;
+    const MM = 0.3528, TOP = 8, LIMIT = 28.5;
     const titleText = title || 'Multiple Choice Exam';
     let blk;
     for (let f = 1; ; f -= 0.04) {
@@ -230,47 +230,59 @@
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setLineWidth(0.25);
-    doc.text('Name', X(0), Y(33));
-    doc.line(X(11), Y(33.8), X(leftW), Y(33.8));
+    doc.text('Name', X(0), Y(34));
+    doc.line(X(11), Y(34.8), X(leftW), Y(34.8));
     const split = leftW * 0.5;
-    doc.text('Name.#', X(0), Y(42));
-    doc.line(X(13.5), Y(42.8), X(split), Y(42.8));
-    doc.text('Section', X(split + 3), Y(42));
-    doc.line(X(split + 16), Y(42.8), X(leftW), Y(42.8));
+    doc.text('Name.#', X(0), Y(43.5));
+    doc.line(X(13.5), Y(44.3), X(split), Y(44.3));
+    doc.text('Section', X(split + 3), Y(43.5));
+    doc.line(X(split + 16), Y(44.3), X(leftW), Y(44.3));
     if (student) {
       doc.setFont('helvetica', 'bold');
-      doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(32.8));
-      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(41.8));
+      doc.text(fitText(doc, student.name || '', leftW - 13, 12, 7), X(12), Y(33.8));
+      if (student.id) doc.text(fitText(doc, student.id, split - 16, 11, 7), X(15), Y(43.3));
       doc.setFont('helvetica', 'normal');
-      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(41.8));
+      if (student.section) doc.text(fitText(doc, student.section, leftW - split - 18, 10, 7), X(split + 17), Y(43.3));
     }
 
-    // Fill example (one line, to leave room above for a bigger title).
-    doc.setFontSize(7);
+    // Fill example.
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
     doc.setTextColor(40);
     const fillLead = 'Fill bubbles like this:';
-    doc.text(fillLead, X(0), Y(48.3));
+    doc.text(fillLead, X(0), Y(50.6));
     doc.setFillColor(0, 0, 0);
-    doc.circle(X(0) + doc.getTextWidth(fillLead) + 3, Y(47.6), L.BUBBLE_R, 'F');
-    doc.text('Use a dark pencil or black/blue pen.', X(0) + doc.getTextWidth(fillLead) + 8, Y(48.3));
+    const fx = X(0) + doc.getTextWidth(fillLead) + 3.5;
+    doc.circle(fx, Y(49.7), L.BUBBLE_R, 'F');
+    doc.text('Use a dark pencil or black/blue pen.', fx + 5, Y(50.6));
     doc.setTextColor(0);
 
-    // Instructions.
-    doc.setDrawColor(60);
-    doc.setLineWidth(0.2);
-    doc.roundedRect(X(0), Y(51), leftW, 16, 1.5, 1.5, 'S');
-    doc.setFont('helvetica', 'normal');
-    const lines = [
-      'Fill each bubble completely. Mark one answer per question unless it says "select all that apply".',
+    // Instructions at 12 pt in a roomy box above the divider. If they would not fit
+    // between the example and the divider, the last items are dropped.
+    const INSTR_PT = 12, INSTR_LH = 5, BOX_TOP = 54, BOX_BOTTOM = 76.5;
+    doc.setFontSize(INSTR_PT);
+    const wrapW = leftW - 8;
+    const items = [
       student ? `Your name${idDigits ? ' and name.# number are' : ' is'} pre-filled. Do not change them.`
         : `Write your name and name.# above.${idDigits ? ' Bubble its number at right.' : ''}`,
-      'Erase changes completely. Do not fold this sheet.',
+      'One answer per question unless it says "select all that apply".',
+      'Fill bubbles completely and erase changes completely.',
       'Do not write on or near the black squares.',
     ];
-    lines.forEach((t, i) => {
-      const fitted = fitText(doc, t, leftW - 6, 7.5, 5.5);
-      doc.text(fitted, X(3), Y(55.5 + i * 3.5));
-    });
+    const maxLines = Math.floor((BOX_BOTTOM - BOX_TOP - 2.4) / INSTR_LH);
+    const laid = [];
+    let nLines = 0;
+    for (const t of items) {
+      const ls = doc.splitTextToSize(t, wrapW);
+      if (nLines + ls.length > maxLines) break;
+      laid.push(...ls);
+      nLines += ls.length;
+    }
+    const boxH = nLines * INSTR_LH + 2.4;
+    doc.setDrawColor(60);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(X(0), Y(BOX_BOTTOM - boxH), leftW, boxH, 1.5, 1.5, 'S');
+    laid.forEach((ln, i) => doc.text(ln, X(4), Y(BOX_BOTTOM - boxH + 1.2 + INSTR_LH * 0.8 + i * INSTR_LH)));
 
     // Student ID grid.
     if (idDigits) {
@@ -308,7 +320,7 @@
     // Divider.
     doc.setDrawColor(0);
     doc.setLineWidth(0.4);
-    doc.line(X(0), Y(69), X(L.FRAME_W), Y(69));
+    doc.line(X(0), Y(78), X(L.FRAME_W), Y(78));
 
     // Questions.
     for (const q of layout.questions) {
@@ -326,7 +338,7 @@
     const footer = [student ? `${student.name}${student.id ? ` (${student.id})` : ''}` : null,
       `${numQuestions} questions, choices ${L.LETTERS[0]} to ${L.LETTERS[numChoices - 1]}`, pageLabel]
       .filter(Boolean).join('  ·  ');
-    doc.text(footer, X(L.FRAME_W / 2), Y(layout.lastRowY + 8), { align: 'center' });
+    doc.text(footer, X(L.FRAME_W / 2), Y(layout.lastRowY + 5.5), { align: 'center' });
     doc.setTextColor(0);
   }
 

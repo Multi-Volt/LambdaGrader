@@ -23,7 +23,7 @@
 
   const BUBBLE_R = 1.8;
   const BUBBLE_DX = 5;
-  const Q_TOP = 76;
+  const Q_TOP = 85;   // sheets printed before this change started at 76; the scanner finds those on its own
   const Q_PITCH = 5;
   const Q_GROUP_GAP = 1.5;       // extra space after every 5 rows
   const Q_MAX_ROWS = 30;
