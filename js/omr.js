@@ -121,9 +121,14 @@
         const bw = maxx - minx + 1, bh = maxy - miny + 1;
         const side = Math.max(bw, bh);
         if (side < minSide || side > maxSide) continue;
-        if (Math.min(bw, bh) / side < 0.7) continue;
+        // Scanners often blank a few mm along the paper edge ("edge erase"), cutting
+        // off the outer part of a corner square. Accept a square clipped like that and
+        // place its centre from the inner edges, which are intact.
+        if (Math.min(bw, bh) / side < 0.45) continue;
         if (n / (bw * bh) < 0.8) continue;
-        const cx = sx / n, cy = sy / n;
+        let cx = sx / n, cy = sy / n;
+        if (bw / side < 0.85) cx = cornerX > rx0 ? minx + (side - 1) / 2 : maxx - (side - 1) / 2;
+        if (bh / side < 0.85) cy = cornerY > ry0 ? miny + (side - 1) / 2 : maxy - (side - 1) / 2;
         const dist = Math.hypot(cx - cornerX, cy - cornerY);
         // Prefer big squares; break ties toward the page corner.
         cands.push({ x: cx, y: cy, n, side, gray: sg / n, score: n - dist * 0.01 });
@@ -156,7 +161,7 @@
       const ratio = (left + right) / (top + bottom);
       if (ratio < expected * 0.8 || ratio > expected * 1.25) continue;
       if (Math.min(top, bottom) / Math.max(top, bottom) < 0.75) continue;
-      const sides = [tl, tr, bl, br].map((c) => Math.sqrt(c.n));
+      const sides = [tl, tr, bl, br].map((c) => c.side);
       const sizeSpread = Math.max(...sides) / Math.min(...sides) - 1;
       const skew = Math.hypot(tl.x + br.x - tr.x - bl.x, tl.y + br.y - tr.y - bl.y) / (top + bottom);
       const cost = sizeSpread + skew + Math.abs(ratio / expected - 1);
