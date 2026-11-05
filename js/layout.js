@@ -56,6 +56,40 @@
     return Math.min(255, maxColumns(choices) * Q_MAX_ROWS);
   }
 
+  /**
+   * Parse a per-question choice spec such as "1-10:4, 11-15:5" (question range : number of choices).
+   * Questions not listed get `dflt` choices.
+   * @returns {{counts:number[], errors:string[]}}
+   */
+  function parseChoiceSpec(text, nq, dflt) {
+    const counts = new Array(Math.max(0, nq || 0)).fill(dflt);
+    const errors = [];
+    for (const part of String(text || '').split(/[;,\n]/)) {
+      const p = part.trim();
+      if (!p) continue;
+      const m = p.match(/^(\d+)(?:\s*(?:-|–|to)\s*(\d+))?\s*[:=]\s*(\d+)$/i);
+      if (!m) { errors.push(`"${p}" is not like 1-10:4.`); continue; }
+      const a = Number(m[1]), b = m[2] ? Number(m[2]) : a, c = Number(m[3]);
+      if (a < 1 || b < a || b > nq) { errors.push(`Questions "${p.split(/[:=]/)[0].trim()}" are outside 1–${nq}.`); continue; }
+      if (c < 2 || c > MAX_CHOICES) { errors.push(`Choices must be 2–${MAX_CHOICES} in "${p}".`); continue; }
+      for (let q = a; q <= b; q++) counts[q - 1] = c;
+    }
+    return { counts, errors };
+  }
+
+  /** Full layout config for an exam: numChoices becomes the widest row, qChoices the per-question counts. */
+  function cfgFor(ex) {
+    const nq = ex.numQuestions;
+    const counts = parseChoiceSpec(ex.choiceSpec, nq, ex.numChoices).counts;
+    const cfg = { numQuestions: nq, numChoices: counts.length ? Math.max(...counts) : ex.numChoices, idDigits: ex.idDigits };
+    if (counts.some((c) => c !== cfg.numChoices)) cfg.qChoices = counts;
+    return cfg;
+  }
+
+  function choicesOf(cfg, q) {
+    return (cfg.qChoices && cfg.qChoices[q]) || cfg.numChoices;
+  }
+
   function validateConfig(cfg) {
     const errs = [];
     const q = cfg.numQuestions, c = cfg.numChoices, d = cfg.idDigits;
@@ -92,7 +126,7 @@
       const colX = startX + col * spacing;
       const y = rowY(r, t);
       const bubbles = [];
-      for (let i = 0; i < nc; i++) bubbles.push({ x: colX + t.xShift + 9 + i * t.dx + BUBBLE_R, y });
+      for (let i = 0; i < choicesOf(cfg, q); i++) bubbles.push({ x: colX + t.xShift + 9 + i * t.dx + BUBBLE_R, y });
       questions.push({ number: q + 1, labelX: colX + t.xShift + 6.5, y, bubbles });
     }
 
@@ -111,7 +145,7 @@
     const keyStrip = Array.from({ length: KEY_BITS }, (_, i) => ({ x: CODE_X0 + CODE_DX / 2 + i * CODE_DX, y: FRAME_H }));
 
     return {
-      cfg: { numQuestions: nq, numChoices: nc, idDigits: nd },
+      cfg: cfg.qChoices ? { numQuestions: nq, numChoices: nc, idDigits: nd, qChoices: cfg.qChoices } : { numQuestions: nq, numChoices: nc, idDigits: nd },
       questions, id, idX0, code, rows, keyStrip,
       lastRowY: rowY(rows - 1, t),
     };
@@ -162,6 +196,6 @@
     ID_BOX_TOP, ID_BOX_H, PAPER, LETTERS, MAX_CHOICES, MAX_ID_DIGITS,
     fiducials: [[0, 0], [FRAME_W, 0], [0, FRAME_H], [FRAME_W, FRAME_H]],
     KEY_BITS, MAX_KEY: 1023, DEFAULT_GRID,
-    maxQuestions, validateConfig, build, encodeCode, decodeCode, encodeKey, decodeKey,
+    maxQuestions, validateConfig, parseChoiceSpec, cfgFor, choicesOf, build, encodeCode, decodeCode, encodeKey, decodeKey,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

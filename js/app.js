@@ -55,8 +55,8 @@
   let keyCache = { sig: null, key: null };
   function getKey() {
     const ex = exam();
-    const sig = `${ex.id}|${ex.numQuestions}|${ex.numChoices}|${ex.keyText}`;
-    if (keyCache.sig !== sig) keyCache = { sig, key: G.parseKey(ex.keyText || '', ex.numQuestions, ex.numChoices) };
+    const sig = `${ex.id}|${ex.numQuestions}|${ex.numChoices}|${ex.choiceSpec || ''}|${ex.keyText}`;
+    if (keyCache.sig !== sig) keyCache = { sig, key: G.parseKey(ex.keyText || '', ex.numQuestions, L.cfgFor(ex).qChoices || ex.numChoices) };
     return keyCache.key;
   }
 
@@ -172,12 +172,14 @@
     for (const [k, sel] of TEXT_SIZE_FIELDS) $(sel).value = (ex.sizes && ex.sizes[k]) || '';
     $('#exQuestions').value = ex.numQuestions;
     $('#exChoices').value = ex.numChoices;
+    $('#exChoiceSpec').value = ex.choiceSpec || '';
     $('#exDigits').value = ex.idDigits;
     $('#exMulti').value = ex.multiScoring || 'exact';
     $('#exPaper').value = ex.paper;
     $('#exErrors').textContent = '';
-    const cap = L.maxQuestions(ex.numChoices);
-    let hint = `One sheet holds up to ${cap} questions with ${ex.numChoices} choices.`;
+    const wide = L.cfgFor(ex).numChoices;
+    const cap = L.maxQuestions(wide);
+    let hint = `One sheet holds up to ${cap} questions with ${wide} choices.`;
     const maxNum = data.roster.reduce((m, st) => Math.max(m, S.idParts(st).num.length), 0);
     if (maxNum > ex.idDigits) hint += ` ⚠ Some name.# numbers have ${maxNum} digits. Increase "Name.# number digits".`;
     if (ex.results.length) hint += ` ${ex.results.length} sheet(s) already graded. Sheets record their own layout, so reprint if you change the layout.`;
@@ -194,7 +196,12 @@
       numChoices: parseInt($('#exChoices').value, 10),
       idDigits: parseInt($('#exDigits').value, 10),
     };
+    const spec = $('#exChoiceSpec').value.trim();
     const errs = L.validateConfig(cfg);
+    if (!errs.length) {
+      errs.push(...L.parseChoiceSpec(spec, cfg.numQuestions, cfg.numChoices).errors);
+      if (!errs.length) errs.push(...L.validateConfig(L.cfgFor(Object.assign({}, cfg, { choiceSpec: spec }))));
+    }
     ex.name = $('#exName').value.trim() || 'Untitled exam';
     ex.title = $('#exTitle').value.trim();
     ex.subtitle = $('#exSubtitle').value.trim();
@@ -217,7 +224,7 @@
       renderExamPicker();
       return;
     }
-    Object.assign(ex, cfg);
+    Object.assign(ex, cfg, { choiceSpec: spec });
     save();
     renderExamPicker();
     renderExam();
@@ -227,12 +234,12 @@
     exam().name = $('#exName').value.trim() || 'Untitled exam';
     renderExamPicker();
   });
-  ['#exName', '#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), ...TEXT_SIZE_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exName', '#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), ...TEXT_SIZE_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exChoiceSpec', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);
     const cur = exam();
-    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, idDigits: cur.idDigits, paper: cur.paper, multiScoring: cur.multiScoring });
+    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, choiceSpec: cur.choiceSpec, idDigits: cur.idDigits, paper: cur.paper, multiScoring: cur.multiScoring });
     data.exams.push(e);
     data.activeExamId = e.id;
     save();
@@ -510,7 +517,7 @@
     if (secs.includes(cur)) sel.value = cur;
     const ex = exam();
     const n = sheetMode() === 'blank' ? Math.max(1, parseInt($('#sheetCopies').value, 10) || 1) : sheetStudents().length;
-    $('#sheetInfo').textContent = `"${examName(ex)}" · ${ex.numQuestions} questions · ${ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
+    $('#sheetInfo').textContent = `"${examName(ex)}" · ${ex.numQuestions} questions · ${L.cfgFor(ex).qChoices ? 'mixed' : ex.numChoices} choices · ${ex.idDigits ? ex.idDigits + '-digit name.# number' : 'no number bubbles'} · ${ex.paper === 'a4' ? 'A4' : 'US Letter'} · ${n} page(s)`;
     $('#sheetError').textContent = '';
   }
   $$('input[name=sheetMode]').forEach((r) => r.addEventListener('change', renderSheets));
@@ -618,14 +625,14 @@
     const ex = exam();
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const gray = window.OMR.toGray(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    const read = window.OMR.readSheet(gray, { numQuestions: ex.numQuestions, numChoices: ex.numChoices, idDigits: ex.idDigits }, session.gridHint);
+    const read = window.OMR.readSheet(gray, L.cfgFor(ex), session.gridHint);
     // A custom template only needs to be worked out once; later pages start from it.
     if (read.grid) session.gridHint = read.grid;
     const T = thresholdFor(read);
     const it = window.OMR.interpret(read, T, G.multiSelectSet(getKey()));
     const warnings = read.warnings.slice();
     const c = read.cfg;
-    if (c.numQuestions !== ex.numQuestions || c.numChoices !== ex.numChoices || c.idDigits !== ex.idDigits) {
+    if (c.numQuestions !== ex.numQuestions || c.numChoices !== L.cfgFor(ex).numChoices || c.idDigits !== ex.idDigits) {
       warnings.push(`Sheet layout (${c.numQuestions}q/${c.numChoices}ch/${c.idDigits}id) differs from exam settings`);
     }
     if (it.idProblem) it.flags.push({ q: 0, type: 'id' });
@@ -771,13 +778,13 @@
     const key = getKey();
     const out = [];
     for (let q = 0; q < ex.numQuestions; q++) {
-      const counts = new Array(ex.numChoices).fill(0);
+      const counts = new Array(L.cfgFor(ex).numChoices).fill(0);
       let blank = 0, multi = 0, credit = 0, n = 0;
       for (const { r, sc } of rows) {
         const a = r.answers[q] || '';
         if (!a) blank++;
         else if (a.length > 1) multi++;
-        for (const c of a) counts[L.LETTERS.indexOf(c)]++;
+        for (const c of a) if (L.LETTERS.indexOf(c) < counts.length) counts[L.LETTERS.indexOf(c)]++;
         if (sc.perQ[q] != null) { n++; credit += sc.perQ[q]; }
       }
       const it = key.items[q];
@@ -827,7 +834,7 @@
     $('#missingList').textContent = missing.length ? missing.map((s) => `${s.name} (${s.id || 'no ID'})`).join(', ') : 'Everyone on the roster has a sheet.';
 
     const items = itemAnalysis(rows);
-    const letters = L.LETTERS.slice(0, ex.numChoices).split('');
+    const letters = L.LETTERS.slice(0, L.cfgFor(ex).numChoices).split('');
     $('#itemTable').innerHTML = `<thead><tr><th>Q</th><th>Key</th><th>% correct</th>${letters.map((l) => `<th>${l}</th>`).join('')}<th>Blank</th><th>Multi</th></tr></thead><tbody>` +
       items.map((i) => `<tr><td>${i.q}</td><td>${esc(i.key)}</td><td class="${i.pct != null && i.pct < 40 ? 'low' : ''}">${i.pct == null ? '-' : pct(i.pct)}</td>` +
         i.counts.map((c, k) => `<td class="${i.key.includes(letters[k]) ? 'keycell' : ''}">${c}</td>`).join('') +
@@ -862,7 +869,7 @@
   });
   $('#csvItems').addEventListener('click', () => {
     const ex = exam();
-    const letters = L.LETTERS.slice(0, ex.numChoices).split('');
+    const letters = L.LETTERS.slice(0, L.cfgFor(ex).numChoices).split('');
     const items = itemAnalysis(annotateResults());
     download(G.toCSV([['Question', 'Key', 'Percent correct', ...letters, 'Blank', 'Multiple'],
       ...items.map((i) => [i.q, i.key, i.pct == null ? '' : pct(i.pct), ...i.counts, i.blank, i.multi])]), `${slug(examName(ex))}-items-${today()}.csv`, 'text/csv');
@@ -997,7 +1004,7 @@
       const ok = sc.perQ[q];
       const cls = ok == null ? '' : ok === 1 ? 'ok' : ok === 0 ? 'no' : 'part';
       html += `<div class="rq ${flagged.has(q + 1) ? 'flag' : ''} ${cls}" title="${it && it.match === 'all' ? 'Select all that apply' : ''}"><b>${q + 1}${it && it.match === 'all' ? '+' : ''}</b>`;
-      for (let i = 0; i < ex.numChoices; i++) {
+      for (let i = 0, nc = L.choicesOf(L.cfgFor(ex), q); i < nc; i++) {
         const l = L.LETTERS[i];
         const k = it && it.mode === 'normal' && it.accept.includes(l);
         html += `<button type="button" data-q="${q}" data-l="${l}" class="${a.includes(l) ? 'on' : ''} ${k ? 'key' : ''}">${l}</button>`;

@@ -23,10 +23,12 @@
     const items = [];
     const errors = [];
     const warnings = [];
-    const valid = LETTERS.slice(0, numChoices);
+    const maxChoices = Array.isArray(numChoices) ? Math.max(...numChoices) : numChoices;
+    const countFor = (q) => (Array.isArray(numChoices) ? numChoices[q - 1] : numChoices) || maxChoices;
     let next = 1;
 
-    const parseAnswer = (tok, lineNo) => {
+    const parseAnswer = (tok, lineNo, q) => {
+      const numChoices = countFor(q), valid = LETTERS.slice(0, numChoices);
       tok = tok.trim().toUpperCase();
       if (tok === '*') return { accept: '', points: 1, mode: 'free', match: 'one' };
       if (tok === '-' || tok === 'X' || tok === 'DROP') return { accept: '', points: 0, mode: 'drop', match: 'one' };
@@ -59,7 +61,7 @@
         let points = null;
         const pm = rest.match(/^(.*?)\s+(?:\(|pts?\s*=?\s*)?(\d+(?:\.\d+)?)\s*(?:pts?|points?)?\)?$/i);
         if (pm) { rest = pm[1]; points = Number(pm[2]); }
-        const item = parseAnswer(rest, lineNo);
+        const item = parseAnswer(rest, lineNo, q);
         if (!item) return;
         if (points !== null && item.mode !== 'drop') item.points = points;
         if (scoring) {
@@ -77,7 +79,7 @@
       const leftover = line.toUpperCase().replace(group, '').replace(/[\s,;]/g, '');
       if (!tokens || leftover) { errors.push(`Line ${lineNo}: could not understand "${raw.trim()}".`); return; }
       for (const t of tokens) {
-        const item = parseAnswer(t.replace(/[[\]]/g, ''), lineNo);
+        const item = parseAnswer(t.replace(/[[\]]/g, ''), lineNo, next);
         if (item) set(next, item, lineNo);
         next++;
       }

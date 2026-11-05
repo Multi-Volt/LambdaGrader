@@ -360,7 +360,7 @@
     doc.setFontSize(6.5);
     doc.setTextColor(60);
     const footer = [student ? `${student.name}${student.id ? ` (${student.id})` : ''}` : null,
-      `${numQuestions} questions, choices ${L.LETTERS[0]} to ${L.LETTERS[numChoices - 1]}`, pageLabel]
+      `${numQuestions} questions, choices ${L.LETTERS[0]} to ${L.LETTERS[numChoices - 1]}${layout.cfg.qChoices ? ' (varies)' : ''}`, pageLabel]
       .filter(Boolean).join('  ·  ');
     doc.text(footer, X(L.FRAME_W / 2), Y(layout.lastRowY + 5.5), { align: 'center' });
     doc.setTextColor(0);
@@ -395,7 +395,7 @@
     const [pw, ph] = L.PAPER[paper];
     const doc = new jsPDF({ unit: 'mm', format: paper, orientation: 'portrait', compress: true });
     doc.setProperties({ title: `${exam.name || plain(exam.title) || 'Exam'} bubble sheets`, creator: 'LambdaGrader' });
-    const layout = L.build(exam);
+    const layout = L.build(L.cfgFor(exam));
     const ox = (pw - L.FRAME_W) / 2;
     const oy = (ph - L.FRAME_H) / 2;
     const pages = opts.students ? opts.students.map((s) => ({ student: s })) : Array.from({ length: opts.copies || 1 }, () => ({}));

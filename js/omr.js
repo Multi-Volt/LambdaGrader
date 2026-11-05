@@ -431,6 +431,10 @@
       cfg = fallbackCfg;
       warnings.push('Layout code unreadable; used the exam settings instead.');
     }
+    // Per-question choice counts are not in the layout code; take them from the exam settings.
+    if (fallbackCfg && fallbackCfg.qChoices && !cfg.qChoices && cfg.numQuestions === fallbackCfg.numQuestions && cfg.numChoices === fallbackCfg.numChoices) {
+      cfg = Object.assign({}, cfg, { qChoices: fallbackCfg.qChoices });
+    }
     const { img, H, white, black } = r;
     const gridPick = chooseGrid(img, H, cfg, white, black, gridHint);
     if (gridPick.poor) warnings.push('Could not line up the answer bubbles with this sheet; answers may be wrong.');
@@ -443,8 +447,8 @@
     const adjust = (v, base) => Math.max(0, (v - base) / (1 - base));
     if (qFills.length >= 8) {
       for (let i = 0; i < cfg.numChoices; i++) {
-        const base = Math.min(0.35, percentile(qFills.map((f) => f[i]), 0.3));
-        qFills.forEach((f) => { f[i] = adjust(f[i], base); });
+        const base = Math.min(0.35, percentile(qFills.map((f) => f[i]).filter((v) => v !== undefined), 0.3));
+        qFills.forEach((f) => { if (i < f.length) f[i] = adjust(f[i], base); });
       }
     }
     const idBase = Math.min(0.35, percentile(idFills.flat(), 0.3));
