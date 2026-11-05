@@ -150,22 +150,43 @@
       findSquareIn(gray, bin, labels, 0, h - rh, rw, h, 0, h),
       findSquareIn(gray, bin, labels, w - rw, h - rh, w, h, w, h),
     ];
-    if (cands.some((c) => !c.length)) return null;
+    const empty = cands.filter((c) => !c.length).length;
+    if (empty > 1) return null;
     const expected = L.FRAME_H / L.FRAME_W;
     let found = null, bestCost = Infinity;
-    for (const tl of cands[0]) for (const tr of cands[1]) for (const bl of cands[2]) for (const br of cands[3]) {
+    const tryQuad = (tl, tr, bl, br, penalty) => {
       const top = Math.hypot(tr.x - tl.x, tr.y - tl.y);
       const bottom = Math.hypot(br.x - bl.x, br.y - bl.y);
       const left = Math.hypot(bl.x - tl.x, bl.y - tl.y);
       const right = Math.hypot(br.x - tr.x, br.y - tr.y);
       const ratio = (left + right) / (top + bottom);
-      if (ratio < expected * 0.8 || ratio > expected * 1.25) continue;
-      if (Math.min(top, bottom) / Math.max(top, bottom) < 0.75) continue;
+      if (ratio < expected * 0.8 || ratio > expected * 1.25) return;
+      if (Math.min(top, bottom) / Math.max(top, bottom) < 0.75) return;
       const sides = [tl, tr, bl, br].map((c) => c.side);
       const sizeSpread = Math.max(...sides) / Math.min(...sides) - 1;
       const skew = Math.hypot(tl.x + br.x - tr.x - bl.x, tl.y + br.y - tr.y - bl.y) / (top + bottom);
-      const cost = sizeSpread + skew + Math.abs(ratio / expected - 1);
+      const cost = sizeSpread + skew + Math.abs(ratio / expected - 1) + penalty;
       if (cost < bestCost) { bestCost = cost; found = [tl, tr, bl, br]; }
+    };
+    if (!empty) {
+      for (const tl of cands[0]) for (const tr of cands[1]) for (const bl of cands[2]) for (const br of cands[3]) tryQuad(tl, tr, bl, br, 0);
+    } else {
+      // One corner square is cut off or hidden: rebuild it from the other three (a parallelogram
+      // guess, so slightly less exact than seeing it) and report that.
+      const m = cands.findIndex((c) => !c.length);
+      const [A, B, C, D] = [0, 1, 2, 3].map((i) => (i === m ? [null] : cands[i]));
+      for (const tl of A) for (const tr of B) for (const bl of C) for (const br of D) {
+        const q = [tl, tr, bl, br];
+        const have = q.filter(Boolean);
+        const synth = {
+          side: have.reduce((t, c) => t + c.side, 0) / 3, gray: have.reduce((t, c) => t + c.gray, 0) / 3, n: 0, synthetic: true,
+        };
+        const [p, o1, o2] = m === 0 ? [br, tr, bl] : m === 1 ? [bl, tl, br] : m === 2 ? [tr, tl, br] : [tl, tr, bl];
+        synth.x = o1.x + o2.x - p.x;
+        synth.y = o1.y + o2.y - p.y;
+        q[m] = synth;
+        tryQuad(q[0], q[1], q[2], q[3], 0.2);
+      }
     }
     return found;
   }
@@ -190,7 +211,9 @@
     return pts;
   }
   const BUBBLE_PTS = discOffsets(L.BUBBLE_R * 0.62, 0.22);
-  const CODE_PTS = discOffsets(L.CODE_SIZE * 0.3, 0.3);
+  const CODE_PTS = discOffsets(L.CODE_SIZE * 0.3, 0.3);       // original 17-bit code
+  const CODE2_PTS = discOffsets(L.CODE2_SIZE * 0.3, 0.2);
+  const REF_PTS = discOffsets(0.8, 0.4);
 
   /**
    * How dark the inside of a bubble is (0 = paper, 1 = corner-square black).
@@ -219,6 +242,100 @@
     let acc = 0;
     for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * 0.9) return v; }
     return 255;
+  }
+
+  // ---------- error-corrected code rows ----------
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const median = (a) => { const v = a.slice().sort((x, y) => x - y); return v[(v.length - 1) >> 1]; };
+
+  /** Median gray of a small disc, or null if any part of it is outside the image. */
+  function discGray(img, H, pts, cx, cy) {
+    const vals = [];
+    for (const [dx, dy] of pts) {
+      const [u, v] = apply(H, cx + dx, cy + dy);
+      if (!(u >= 1 && v >= 1 && u <= img.w - 3 && v <= img.h - 3)) return null;
+      vals.push(sampleGray(img, u, v));
+    }
+    return median(vals);
+  }
+
+  /**
+   * How ink-like each square of a code row is, judged against the paper right next to it (above or
+   * below the row and in the gaps between squares) so uneven lighting, shadows and fading cancel out.
+   * `warp` bends the row: x/y offsets (mm) as a constant, a tilt and a bow along the row.
+   */
+  function codeSoft(img, H, positions, outward, warp, inkLevel) {
+    const n = positions.length, r = new Float32Array(n), valid = new Uint8Array(n);
+    const c0 = (positions[0].x + positions[n - 1].x) / 2, half = (positions[n - 1].x - positions[0].x) / 2;
+    const gap = L.CODE2_DX / 2;
+    for (let i = 0; i < n; i++) {
+      const u = (positions[i].x - c0) / half;
+      const cx = positions[i].x + warp.a + warp.b * u + warp.c * (u * u - 1 / 3);
+      const cy = positions[i].y + warp.d + warp.e * u;
+      const m = discGray(img, H, CODE2_PTS, cx, cy);
+      if (m === null) continue;
+      const refs = [discGray(img, H, REF_PTS, cx, cy + outward * 3.4), discGray(img, H, [[0, 0]], cx - gap, cy), discGray(img, H, [[0, 0]], cx + gap, cy)].filter((v) => v !== null);
+      if (!refs.length) continue;
+      valid[i] = 1;
+      r[i] = m / Math.max(40, median(refs));
+    }
+    const seen = Array.from(r).filter((_, i) => valid[i]);
+    const p10 = percentile(seen, 0.1);
+    const lo = p10 > 0.8 ? inkLevel : Math.max(0.03, Math.min(0.6, p10));
+    const s = r.map((v, i) => (valid[i] ? clamp01((1 - v) / (1 - lo)) : 0));
+    return { s, valid, nvalid: seen.length };
+  }
+
+  const WARP_STEP = { a: 0.6, b: 0.6, c: 0.5, d: 0.6, e: 0.5 };
+
+  /**
+   * Read one error-correcting code row. Starts from the row where the corner squares say it is,
+   * then nudges its position, tilt and bow (a warped or stretched page) while the decode keeps
+   * getting cleaner. Accepts only a clear winner: a close fit with no near-miss rival.
+   * @returns {{value, cost, margin, nvalid, ok:boolean}|null}
+   */
+  function readCodeRow(img, H, positions, outward, kind, inkLevel) {
+    const entries = [];
+    let nvalid = 0;
+    const evalWarp = (warp) => {
+      const soft = codeSoft(img, H, positions, outward, warp, inkLevel);
+      if (soft.nvalid < 22) return Infinity;
+      const top = L.softDecode(kind, soft.s, soft.valid, 3);
+      for (const t of top) entries.push({ index: t.index, cost: t.cost, nvalid: soft.nvalid });
+      return top[0].cost;
+    };
+    const confident = () => {
+      entries.sort((x, y) => x.cost - y.cost);
+      const best = entries[0];
+      if (!best) return null;
+      let second = Infinity;
+      for (const e of entries) if (e.index !== best.index) { second = e.cost; break; }
+      const margin = second - best.cost;
+      return { index: best.index, cost: best.cost, margin: Number.isFinite(margin) ? margin : 99, nvalid: best.nvalid, ok: best.cost <= 0.085 * best.nvalid && margin >= 1.0 };
+    };
+    let warp = { a: 0, b: 0, c: 0, d: 0, e: 0 };
+    let cost = evalWarp(warp);
+    let res = confident();
+    if (res && res.ok && res.cost <= 0.04 * res.nvalid && res.margin >= 3) return finish(res);
+    for (let round = 0; round < 4; round++) {
+      let moved = false;
+      for (const k of ['a', 'd', 'b', 'e', 'c']) {
+        for (const sign of [-1, 1]) {
+          const w = Object.assign({}, warp, { [k]: warp[k] + sign * WARP_STEP[k] });
+          if (Math.abs(w[k]) > 2.4) continue;
+          const c = evalWarp(w);
+          if (c < cost - 1e-6) { cost = c; warp = w; moved = true; }
+        }
+      }
+      if (!moved) break;
+    }
+    res = confident();
+    return res && finish(res);
+
+    function finish(r) {
+      return { value: L.codebook(kind).values[r.index], cost: r.cost, margin: r.margin, nvalid: r.nvalid, ok: r.ok };
+    }
   }
 
   function percentile(values, p) {
@@ -406,30 +523,49 @@
       if (!H) return null;
       const white = whiteLevel(img, fid);
       const black = fid.reduce((s, f) => s + f.gray, 0) / 4;
-      const bits = [], below = [];
+      const ink = Math.max(0.03, Math.min(0.6, black / Math.max(40, white)));
+      const top = Array.from({ length: L.CODE2_BITS }, (_, i) => ({ x: L.CODE2_X0 + i * L.CODE2_DX, y: 0 }));
+      const v2 = readCodeRow(img, H, top, -1, 'config', ink);
+      return { img, rotated, fid, H, white, black, ink, v2: v2 && v2.ok ? v2 : null, v2raw: v2, upright: 0, cfg: null };
+    };
+    // The original 17-bit code, for sheets printed before the error-correcting one.
+    const legacy = (r) => {
+      const bits = [], below = [], clear = [];
       for (let i = 0; i < L.CODE_BITS; i++) {
         const x = L.CODE_X0 + i * L.CODE_DX;
-        bits.push(darkness(img, H, CODE_PTS, x, 0, white, black) > 0.5 ? 1 : 0);
-        below.push(darkness(img, H, CODE_PTS, x, L.FRAME_H, white, black) > 0.5 ? 1 : 0);
+        const d = darkness(r.img, r.H, CODE_PTS, x, 0, r.white, r.black);
+        bits.push(d > 0.5 ? 1 : 0);
+        clear.push(Math.abs(d - 0.5) > 0.2);
+        below.push(darkness(r.img, r.H, CODE_PTS, x, L.FRAME_H, r.white, r.black) > 0.5 ? 1 : 0);
       }
       // Code squares along the top edge and nothing at the same spots on the bottom
       // edge means upright. A decode that merely passes parity is not proof of that.
-      const upright = bits.reduce((a, b) => a + b, 0) - below.reduce((a, b) => a + b, 0);
-      return { img, rotated, fid, H, white, black, upright, cfg: L.decodeCode(bits) };
+      r.upright = bits.reduce((a, b) => a + b, 0) - below.reduce((a, b) => a + b, 0);
+      r.cfg = clear.every(Boolean) ? L.decodeCode(bits) : null;
+      r.legacy = true;
     };
 
     let r = attempt(gray, false);
-    if (!r || r.upright <= 0 || !r.cfg) {
+    if (!r || !r.v2) {
       const r2 = attempt(rotate180(gray), true);
-      if (r2 && (!r || r2.upright > r.upright || (r2.upright === r.upright && !r.cfg && r2.cfg))) r = r2;
+      if (r2 && r2.v2) r = r2;
+      else {
+        if (r) legacy(r);
+        if (r2) legacy(r2);
+        if (!r || r.upright <= 0 || !r.cfg) {
+          if (r2 && (!r || r2.upright > r.upright || (r2.upright === r.upright && !r.cfg && r2.cfg))) r = r2;
+        }
+      }
     }
     if (!r) throw new Error('Could not find the four black corner squares. Make sure the whole sheet is visible and upright.');
+    if (r.v2) r.cfg = r.v2.value;
     const warnings = [];
+    if (r.fid.some((f) => f.synthetic)) warnings.push('One corner square was cut off or hidden; its position was estimated, so check the answers near that corner.');
     let cfg = r.cfg;
     if (!cfg) {
       if (!fallbackCfg) throw new Error('Could not read the layout code along the top edge of the sheet.');
       cfg = fallbackCfg;
-      warnings.push('Layout code unreadable; used the exam settings instead.');
+      warnings.push('Layout code unreadable or too damaged to trust; used the exam settings instead.');
     }
     // Per-question choice counts are not in the layout code; take them from the exam settings.
     if (fallbackCfg && fallbackCfg.qChoices && !cfg.qChoices && cfg.numQuestions === fallbackCfg.numQuestions && cfg.numChoices === fallbackCfg.numChoices) {
@@ -453,8 +589,13 @@
     }
     const idBase = Math.min(0.35, percentile(idFills.flat(), 0.3));
     idFills.forEach((col) => col.forEach((v, d) => { col[d] = adjust(v, idBase); }));
-    const keyBits = layout.keyStrip.map((p) => (darkness(img, H, CODE_PTS, p.x, p.y, white, black) > 0.5 ? 1 : 0));
-    const key = L.decodeKey(keyBits);
+    // Student key: the error-corrected strip, or the original 12-bit one on sheets that used the old code.
+    let key = null;
+    const kr = readCodeRow(img, H, layout.keyStrip, 1, 'key', r.ink);
+    if (kr && kr.ok) key = kr.value;
+    else if (r.legacy && r.cfg) {
+      key = L.decodeKey(layout.legacyKeyStrip.map((p) => (darkness(img, H, CODE_PTS, p.x, p.y, white, black) > 0.5 ? 1 : 0)));
+    }
     if (key === null) warnings.push('Student code strip at the bottom edge is damaged; matched by name.# instead.');
     const all = qFills.flat().concat(idFills.flat());
     const autoT = Math.max(0.3, Math.min(0.6, otsu(all)));

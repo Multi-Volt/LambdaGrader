@@ -157,16 +157,14 @@
     // Corner squares and layout code.
     for (const [fx, fy] of L.fiducials) doc.rect(X(fx - half), Y(fy - half), L.FIDUCIAL, L.FIDUCIAL, 'F');
     for (const c of layout.code) {
-      if (c.bit) doc.rect(X(c.x - L.CODE_SIZE / 2), Y(c.y - L.CODE_SIZE / 2), L.CODE_SIZE, L.CODE_SIZE, 'F');
+      if (c.bit) doc.rect(X(c.x - L.CODE2_SIZE / 2), Y(c.y - L.CODE2_SIZE / 2), L.CODE2_SIZE, L.CODE2_SIZE, 'F');
     }
 
-    // Student code strip (personalised sheets only).
-    if (student && student.key) {
-      L.encodeKey(student.key).forEach((bit, i) => {
-        const p = layout.keyStrip[i];
-        if (bit) doc.rect(X(p.x - L.CODE_SIZE / 2), Y(p.y - L.CODE_SIZE / 2), L.CODE_SIZE, L.CODE_SIZE, 'F');
-      });
-    }
+    // Student code strip: the roster key on personalised sheets, key 0 on blank ones.
+    L.encodeKey2((student && student.key) || 0).forEach((bit, i) => {
+      const p = layout.keyStrip[i];
+      if (bit) doc.rect(X(p.x - L.CODE2_SIZE / 2), Y(p.y - L.CODE2_SIZE / 2), L.CODE2_SIZE, L.CODE2_SIZE, 'F');
+    });
 
     // LambdaGrader logo on the bottom edge, clear of the student code strip and corner squares.
     if (showLogo) {

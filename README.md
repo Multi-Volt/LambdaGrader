@@ -78,8 +78,8 @@ See [`samples/answer-key.txt`](samples/answer-key.txt) and [`samples/roster.csv`
 Each sheet has bubbles for the **number** in the student's name.#. A sheet is matched to a student in this order:
 
 1. A student you picked by hand in the review screen.
-2. The code strip along the bottom edge. Only personalised sheets have it, and it is unique
-   per student.
+2. The code strip along the bottom edge. Only personalised sheets carry a student, and it is
+   unique per student and error-corrected, so it is never matched wrongly.
 3. The bubbled number.
 
 If the number fits more than one student (for example `smith.3` and `jones.3` on a blank
@@ -131,8 +131,15 @@ To run it locally, open `index.html`, or serve the folder with `python3 -m http.
    analysis. The squares are filtered by size, squareness and fill.
 3. Fits a perspective transform from sheet coordinates (mm) to image pixels. This corrects for
    skew, scaling and rotation.
-4. Reads the 16-bit layout code along the top edge (with a parity check). If it fails, the reader
-   tries the page rotated 180°.
+4. Reads the layout code along the top edge: 32 small squares forming an error-correcting (BCH)
+   code. Each square is judged against the paper right next to it, so shadows and uneven lighting
+   cancel out. The reader also tries small shifts, tilts and bows of the row to follow a warped
+   page, and decodes softly, so a few smudged or cut-off squares are corrected. It accepts a
+   result only if it fits closely and no other layout comes close. Otherwise it tries the page
+   rotated 180°, then falls back to the exam settings with a warning. The student code strip
+   along the bottom edge is read the same way. Sheets printed with the older 17-bit code are
+   still read. A corner square that is cut off entirely is rebuilt from the other three, with a
+   warning.
 5. Measures how dark the inside of each bubble is, normalised between the paper white and the
    corner-square black.
 6. Picks a per-page threshold (Otsu, clamped to 0.30–0.60) and applies the marking rules. The

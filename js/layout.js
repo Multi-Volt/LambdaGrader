@@ -16,10 +16,20 @@
 
   // Layout code: a row of 16 small squares along the top edge that records the
   // sheet's question/choice/ID configuration so scans are self-describing.
+  // (CODE_* is the original 17-bit design, still read for sheets printed with it; see CODE2_* below.)
   const CODE_BITS = 17;
   const CODE_X0 = 30;
   const CODE_DX = 6;
   const CODE_SIZE = 3.5;
+
+  // Current design: a 32-bit error-correcting code (extended BCH, distance 8, scrambled so it is
+  // never mostly blank) on the top edge for the sheet layout, and another along the bottom edge for
+  // the student key. Both are decoded softly, so a few chopped, smudged or washed-out squares are
+  // corrected and anything unreliable is rejected instead of misread.
+  const CODE2_BITS = 32;
+  const CODE2_X0 = 30.5;
+  const CODE2_DX = 3.2;
+  const CODE2_SIZE = 2.5;
 
   const BUBBLE_R = 1.8;
   const BUBBLE_DX = 5;
@@ -139,16 +149,94 @@
       id.push({ x, bubbles });
     }
 
-    const code = encodeCode(cfg).map((bit, i) => ({ x: CODE_X0 + i * CODE_DX, y: 0, bit }));
+    const code = encodeCode2(cfg).map((bit, i) => ({ x: CODE2_X0 + i * CODE2_DX, y: 0, bit }));
 
     // Offset by half a step so an upside-down strip never overlaps the layout code.
-    const keyStrip = Array.from({ length: KEY_BITS }, (_, i) => ({ x: CODE_X0 + CODE_DX / 2 + i * CODE_DX, y: FRAME_H }));
+    const keyStrip = Array.from({ length: CODE2_BITS }, (_, i) => ({ x: CODE2_X0 + CODE2_DX / 2 + i * CODE2_DX, y: FRAME_H }));
+    const legacyKeyStrip = Array.from({ length: KEY_BITS }, (_, i) => ({ x: CODE_X0 + CODE_DX / 2 + i * CODE_DX, y: FRAME_H }));
 
     return {
       cfg: cfg.qChoices ? { numQuestions: nq, numChoices: nc, idDigits: nd, qChoices: cfg.qChoices } : { numQuestions: nq, numChoices: nc, idDigits: nd },
-      questions, id, idX0, code, rows, keyStrip,
+      questions, id, idX0, code, rows, keyStrip, legacyKeyStrip,
       lastRowY: rowY(rows - 1, t),
     };
+  }
+
+  // ---------- error-correcting codes ----------
+
+  const BCH_G = 0x8FAF;               // generator of the (31,16) BCH code, t = 3
+  const CONFIG_MASK = 0xA5C39E27;
+  const KEY_MASK = 0x3C6B5D91;
+  const KEY_TAG = 0x25;               // 6 fixed bits after the 10-bit key, so garbage rarely looks valid
+
+  /** 16 data bits → 32-bit word (31-bit BCH codeword + overall parity), minimum distance 8. */
+  function bch32(m) {
+    let rem = m << 15;
+    for (let b = 30; b >= 15; b--) if ((rem >> b) & 1) rem ^= BCH_G << (b - 15);
+    let w = (m << 15) | (rem & 0x7FFF);
+    let p = 0;
+    for (let b = 0; b < 31; b++) p ^= (w >> b) & 1;
+    return ((w | (p << 31)) >>> 0);
+  }
+
+  function wordBits(w) {
+    const bits = [];
+    for (let i = 0; i < CODE2_BITS; i++) bits.push((w >>> i) & 1);
+    return bits;
+  }
+
+  function configPayload(cfg) {
+    return (cfg.numQuestions & 255) | (((cfg.numChoices - 2) & 7) << 8) | ((cfg.idDigits & 15) << 11);
+  }
+
+  function encodeCode2(cfg) { return wordBits((bch32(configPayload(cfg)) ^ CONFIG_MASK) >>> 0); }
+  function encodeKey2(key) { return wordBits((bch32((key & 1023) | (KEY_TAG << 10)) ^ KEY_MASK) >>> 0); }
+
+  const books = {};
+  /** All words a sheet can carry: kind 'config' (every valid layout) or 'key' (0..1023). */
+  function codebook(kind) {
+    if (books[kind]) return books[kind];
+    const words = [], values = [];
+    if (kind === 'config') {
+      for (let q = 1; q <= 255; q++) for (let c = 2; c <= MAX_CHOICES; c++) for (let d = 0; d <= MAX_ID_DIGITS; d++) {
+        const cfg = { numQuestions: q, numChoices: c, idDigits: d };
+        if (validateConfig(cfg).length) continue;
+        words.push((bch32(configPayload(cfg)) ^ CONFIG_MASK) >>> 0);
+        values.push(cfg);
+      }
+    } else {
+      for (let k = 0; k < 1024; k++) { words.push((bch32(k | (KEY_TAG << 10)) ^ KEY_MASK) >>> 0); values.push(k); }
+    }
+    return (books[kind] = { words: Uint32Array.from(words), values });
+  }
+
+  /**
+   * Soft-decision decode. s[i] is how likely bit i is ink (0..1), valid[i] is 0 for a square that
+   * could not be seen (cut off by the image edge). Returns the `count` closest words as
+   * [{index, cost}] (cost = squared distance over the visible bits), best first.
+   */
+  function softDecode(kind, s, valid, count) {
+    const { words } = codebook(kind);
+    // cost(word) = Σ s² + Σ over its 1-bits of (1 - 2s); tabulate per byte.
+    let base = 0;
+    const d = new Float64Array(CODE2_BITS);
+    for (let i = 0; i < CODE2_BITS; i++) if (valid[i]) { base += s[i] * s[i]; d[i] = 1 - 2 * s[i]; }
+    const tab = new Float64Array(4 * 256);
+    for (let by = 0; by < 4; by++) for (let v = 1; v < 256; v++) {
+      const low = v & -v, bit = 31 - Math.clz32(low);
+      tab[by * 256 + v] = tab[by * 256 + (v ^ low)] + d[by * 8 + bit];
+    }
+    const top = [];
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      const c = base + tab[w & 255] + tab[256 + ((w >>> 8) & 255)] + tab[512 + ((w >>> 16) & 255)] + tab[768 + (w >>> 24)];
+      if (top.length < count || c < top[top.length - 1].cost) {
+        top.push({ index: i, cost: c });
+        top.sort((a, b) => a.cost - b.cost);
+        if (top.length > count) top.pop();
+      }
+    }
+    return top;
   }
 
   function encodeCode(cfg) {
@@ -192,10 +280,10 @@
   }
 
   g.Layout = {
-    FRAME_W, FRAME_H, FIDUCIAL, CODE_BITS, CODE_X0, CODE_DX, CODE_SIZE, BUBBLE_R, ID_DX, ID_DY, ID_TOP,
+    FRAME_W, FRAME_H, FIDUCIAL, CODE2_BITS, CODE2_X0, CODE2_DX, CODE2_SIZE, CODE_BITS, CODE_X0, CODE_DX, CODE_SIZE, BUBBLE_R, ID_DX, ID_DY, ID_TOP,
     ID_BOX_TOP, ID_BOX_H, PAPER, LETTERS, MAX_CHOICES, MAX_ID_DIGITS,
     fiducials: [[0, 0], [FRAME_W, 0], [0, FRAME_H], [FRAME_W, FRAME_H]],
     KEY_BITS, MAX_KEY: 1023, DEFAULT_GRID,
-    maxQuestions, validateConfig, parseChoiceSpec, cfgFor, choicesOf, build, encodeCode, decodeCode, encodeKey, decodeKey,
+    encodeCode2, encodeKey2, codebook, softDecode, bch32, maxQuestions, validateConfig, parseChoiceSpec, cfgFor, choicesOf, build, encodeCode, decodeCode, encodeKey, decodeKey,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
