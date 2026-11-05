@@ -132,7 +132,11 @@
     return Math.max(0, (hits - wrong) / want.size);
   }
 
-  function scoreAnswers(answers, key, numQuestions, multiScoring) {
+  /**
+   * totalPoints (optional): grade out of this many points instead of the key's total, so points
+   * above it are extra credit (a score can pass 100%).
+   */
+  function scoreAnswers(answers, key, numQuestions, multiScoring, totalPoints) {
     let score = 0, possible = 0, correct = 0;
     const perQ = [];
     for (let q = 0; q < numQuestions; q++) {
@@ -145,6 +149,7 @@
       if (credit === 1) correct++;
     }
     score = Math.round(score * 100) / 100;
+    if (totalPoints > 0) possible = totalPoints;
     return { score, possible, correct, perQ, percent: possible ? (100 * score) / possible : 0 };
   }
 

@@ -104,7 +104,7 @@
 
   function scoreOf(r) {
     const ex = exam();
-    return G.scoreAnswers(r.answers, getKey(), ex.numQuestions, ex.multiScoring || 'exact');
+    return G.scoreAnswers(r.answers, getKey(), ex.numQuestions, ex.multiScoring || 'exact', ex.totalPoints);
   }
 
   /** Derived status info for every result in the active exam. */
@@ -175,6 +175,7 @@
     $('#exChoiceSpec').value = ex.choiceSpec || '';
     $('#exDigits').value = ex.idDigits;
     $('#exMulti').value = ex.multiScoring || 'exact';
+    $('#exTotal').value = ex.totalPoints > 0 ? ex.totalPoints : '';
     $('#exPaper').value = ex.paper;
     $('#exErrors').textContent = '';
     const wide = L.cfgFor(ex).numChoices;
@@ -218,6 +219,7 @@
     }
     ex.paper = $('#exPaper').value;
     ex.multiScoring = $('#exMulti').value;
+    ex.totalPoints = Math.max(0, parseFloat($('#exTotal').value) || 0);
     if (errs.length) {
       $('#exErrors').textContent = errs.join(' ');
       save();
@@ -234,12 +236,12 @@
     exam().name = $('#exName').value.trim() || 'Untitled exam';
     renderExamPicker();
   });
-  ['#exName', '#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), ...TEXT_SIZE_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exChoiceSpec', '#exDigits', '#exPaper', '#exMulti'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
+  ['#exName', '#exTitle', '#exSubtitle', '#exClass', '#exHeaderRight', '#exPageNum', '#exLogo', ...TEXT_COLOR_FIELDS.map((f) => f[1]), ...TEXT_SIZE_FIELDS.map((f) => f[1]), '#exQuestions', '#exChoices', '#exChoiceSpec', '#exDigits', '#exPaper', '#exMulti', '#exTotal'].forEach((s) => $(s).addEventListener('change', applyExamSettings));
 
   $('#exNew').addEventListener('click', () => {
     const e = S.newExam(`Exam ${data.exams.length + 1}`);
     const cur = exam();
-    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, choiceSpec: cur.choiceSpec, idDigits: cur.idDigits, paper: cur.paper, multiScoring: cur.multiScoring });
+    Object.assign(e, { numQuestions: cur.numQuestions, numChoices: cur.numChoices, choiceSpec: cur.choiceSpec, idDigits: cur.idDigits, paper: cur.paper, multiScoring: cur.multiScoring, totalPoints: cur.totalPoints });
     data.exams.push(e);
     data.activeExamId = e.id;
     save();
@@ -461,7 +463,7 @@
     $('#keyWarnings').textContent = key.warnings.join(' ');
     const scored = key.items.filter((it) => it && it.mode !== 'drop');
     const total = scored.reduce((s, it) => s + it.points, 0);
-    $('#keySummary').textContent = `${scored.length} scored · ${fmtPts(total)} pts`;
+    $('#keySummary').textContent = `${scored.length} scored · ${fmtPts(total)} pts` + (ex.totalPoints > 0 ? ` · graded out of ${fmtPts(ex.totalPoints)}${total > ex.totalPoints ? ` (${fmtPts(total - ex.totalPoints)} extra credit)` : ''}` : '');
     let html = '';
     for (let q = 0; q < ex.numQuestions; q++) {
       const it = key.items[q];

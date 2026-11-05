@@ -86,6 +86,10 @@
               <option value="partial">Partial credit: (right marks - wrong marks) / right answers</option>
             </select>
           </label>
+          <label>Total points (optional)
+            <input id="exTotal" type="number" min="0" step="any" placeholder="Blank = the answer key's total">
+          </label>
+          <p class="hint">Scores are out of this number. If the answer key adds up to more, the extra points are extra credit, so a score can go over 100%.</p>
           <p id="exCapacity" class="hint"></p>
           <p id="exErrors" class="error"></p>
           <div class="btns">
